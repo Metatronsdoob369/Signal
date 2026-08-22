@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signal Example Client Page</title>
+    <meta
+      name="description"
+      content="A demo page used to verify Signal's embed script, SEO scoring, and AIO structured-data checks end to end."
+    />
+    <link rel="canonical" href="http://localhost:3000/example-client-page.html" />
+    <meta property="og:title" content="Signal Example Client Page" />
+    <meta
+      property="og:description"
+      content="Demo page for Signal embed verification."
+    />
+    <meta property="og:image" content="http://localhost:3000/og.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Signal Example Client Page",
+        "description": "Demo page for Signal embed verification."
+      }
+    </script>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        max-width: 42rem;
+        margin: 3rem auto;
+        padding: 0 1.25rem;
+        line-height: 1.6;
+        color: #141414;
+        background: #f7f4ef;
+      }
+      code {
+        font-family: ui-monospace, monospace;
+        font-size: 0.875rem;
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <main id="main">
+      <h1>Signal example client page</h1>
+      <p>
+        Signal is an embeddable audit pack. This page is intentionally structured so a real
+        beacon can score SEO and AIO signals without touching Property Hydra.
+      </p>
+      <h2>What this page includes</h2>
+      <ul>
+        <li>Title and meta description</li>
+        <li>Canonical and Open Graph tags</li>
+        <li>One H1, supporting H2</li>
+        <li>JSON-LD WebPage structured data</li>
+        <li>Landmark region via main</li>
+      </ul>
+      <p>
+        SEO means search engine optimization. AIO means AI optimization for citation readiness.
+        Clear definitions help both humans and machines.
+      </p>
+      <p>
+        How do you verify Signal? Open this page with a valid token query string. What should you
+        see next? A new audit row on the dashboard. Why does that matter? It proves the wedge works.
+      </p>
+      <img src="/file.svg" alt="Demo file icon" width="48" height="48" />
+    </main>
+    <script>
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var token = params.get("token");
+        if (!token) {
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            "<p><code>Add ?token=YOUR_TOKEN to this URL.</code></p>"
+          );
+          return;
+        }
+        var origin = location.origin;
+        var s = document.createElement("script");
+        s.defer = true;
+        s.src = origin + "/api/pack?token=" + encodeURIComponent(token);
+        document.body.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>

@@ -1,5 +1,32 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# Signal — agent entry context
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+> Load this first. Property Hydra is a separate product. Do not write into `~/property-hydra`.
+
+## Current state — 2026-08-22
+
+**Thesis:** one embed script audits a page on load. Deterministic SEO + AIO scores. Token-scoped dashboard.
+
+**Wedge:** register domain → embed pack → beacon → `/dashboard/[token]`.
+
+### Hard nos
+
+- No cloud inference of page content in v0.1
+- No auto-fix that mutates the client DOM
+- No cross-tenant “self-learning” / invented lift claims
+- No unauthenticated global site listing
+- No secrets in git (`.env*` ignored)
+
+### Run
+
+```bash
+docker compose up -d
+cp .env.example .env.local
+bun install
+bun run db:migrate
+bun run test
+bun run dev
+```
+
+### Stack
+
+Next.js 16 App Router · React 19 · Tailwind v4 · Postgres 16 · Drizzle · Zod · Vitest · Bun
