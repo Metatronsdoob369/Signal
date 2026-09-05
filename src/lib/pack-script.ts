@@ -71,7 +71,8 @@ export function buildPackScript(opts: { token: string; origin: string }): string
     for (var m = 0; m < inputs.length; m++) {
       var input = inputs[m];
       var id = input.getAttribute("id");
-      var hasLabel = id && document.querySelector('label[for="' + id + '"]');
+      var safeId = id && window.CSS && CSS.escape ? CSS.escape(id) : id;
+      var hasLabel = safeId && document.querySelector('label[for="' + safeId + '"]');
       var hasAria = input.getAttribute("aria-label") || input.getAttribute("aria-labelledby");
       if (!hasLabel && !hasAria) inputsWithoutLabels++;
     }
@@ -216,6 +217,50 @@ export function buildPackScript(opts: { token: string; origin: string }): string
     }).catch(function () {});
   }
 
+  var variantId = null;
+  var startedAt = Date.now();
+  var maxScroll = 0;
+  var lcp = 0;
+  var cls = 0;
+  var experimentSent = false;
+
+  function applyVariant(v) {
+    if (!v || v.error) return;
+    variantId = v.variantId || null;
+    if (v.title) document.title = v.title;
+    if (v.description) {
+      var m = document.querySelector('meta[name="description"]');
+      if (!m) {
+        m = document.createElement("meta");
+        m.setAttribute("name", "description");
+        (document.head || document.documentElement).appendChild(m);
+      }
+      m.setAttribute("content", v.description);
+    }
+  }
+
+  window.addEventListener("scroll", function () {
+    var h = document.documentElement;
+    var pct = ((h.scrollTop || document.body.scrollTop) + window.innerHeight) / Math.max(h.scrollHeight, 1) * 100;
+    if (pct > maxScroll) maxScroll = Math.min(100, pct);
+  }, { passive: true });
+
+  try {
+    new PerformanceObserver(function (list) {
+      var es = list.getEntries();
+      if (es.length) lcp = es[es.length - 1].startTime;
+    }).observe({ type: "largest-contentful-paint", buffered: true });
+    new PerformanceObserver(function (list) {
+      var es = list.getEntries();
+      for (var i = 0; i < es.length; i++) if (!es[i].hadRecentInput) cls += es[i].value;
+    }).observe({ type: "layout-shift", buffered: true });
+  } catch (e) {}
+
+  function engagementScore() {
+    var dwell = (Date.now() - startedAt) / 1000;
+    return Math.round((Math.min(1, maxScroll / 100) * 0.6 + Math.min(1, dwell / 45) * 0.4) * 100) / 100;
+  }
+
   function run() {
     try {
       send(collect());
@@ -224,10 +269,45 @@ export function buildPackScript(opts: { token: string; origin: string }): string
     }
   }
 
+  function sendExperiment() {
+    if (experimentSent || !variantId) return;
+    experimentSent = true;
+    send({
+      token: TOKEN,
+      url: location.href,
+      intent: "experiment",
+      variantId: variantId,
+      events: [
+        { type: "impression", value: 1 },
+        { type: "engage", value: engagementScore() },
+        { type: "vital", metric: "lcp", value: Math.round(lcp) },
+        { type: "vital", metric: "cls", value: Math.round(cls * 1000) / 1000 }
+      ]
+    });
+  }
+
+  function resolveThenAudit() {
+    var descEl = document.querySelector('meta[name="description"]');
+    var resolveUrl = API_ORIGIN + "/api/resolve?token=" + encodeURIComponent(TOKEN) +
+      "&path=" + encodeURIComponent(location.pathname) +
+      "&t=" + encodeURIComponent(document.title || "") +
+      "&d=" + encodeURIComponent(descEl ? (descEl.getAttribute("content") || "") : "");
+    fetch(resolveUrl, { mode: "cors" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) { applyVariant(v); })
+      .catch(function () {})
+      .then(function () { run(); });
+  }
+
+  window.addEventListener("pagehide", sendExperiment);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") sendExperiment();
+  });
+
   if (document.readyState === "complete") {
-    setTimeout(run, 50);
+    setTimeout(resolveThenAudit, 50);
   } else {
-    window.addEventListener("load", function () { setTimeout(run, 50); });
+    window.addEventListener("load", function () { setTimeout(resolveThenAudit, 50); });
   }
 })();
 `;

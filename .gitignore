@@ -12,6 +12,12 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/playwright-results.xml
+/blob-report/
+/playwright/.cache/
+/artifacts/
 
 # next.js
 /.next/
@@ -40,3 +46,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated terrain husk (internal; not product runtime)
+/terrain/*.json
+/terrain/defense/
+/terrain/PROPRIETARY

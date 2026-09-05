@@ -1,7 +1,6 @@
 "use client";
 
 export default function GlobalError({
-  error,
   reset,
 }: {
   error: Error & { digest?: string };
@@ -24,7 +23,7 @@ export default function GlobalError({
         <div style={{ maxWidth: "32rem" }}>
           <h1 style={{ fontSize: "1.25rem", marginBottom: "0.75rem" }}>Signal hit an error</h1>
           <p style={{ color: "#5c5c5c", marginBottom: "1.25rem" }}>
-            {error.message || "Something went wrong."}
+            Something went wrong.
           </p>
           <button
             type="button"

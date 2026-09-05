@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { MAX_TOKEN_LENGTH } from "@/lib/hard-nos";
+import { isValidHostname } from "@/lib/tenant";
+
+const count = z.number().int().nonnegative().max(1_000_000);
+const millis = z.number().nonnegative().max(3_600_000);
 
 export const createSiteSchema = z.object({
   domain: z
@@ -6,83 +11,102 @@ export const createSiteSchema = z.object({
     .trim()
     .min(1)
     .max(253)
-    .transform((value) => value.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase()),
+    .transform((value) => value.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase())
+    .refine(isValidHostname),
   name: z.string().trim().max(200).optional(),
 });
 
 export type CreateSiteInput = z.infer<typeof createSiteSchema>;
 
-export const beaconMetadataSchema = z.object({
-  title: z.string().default(""),
-  description: z.string().default(""),
-  canonical: z.string().default(""),
-  ogTitle: z.string().default(""),
-  ogDescription: z.string().default(""),
-  ogImage: z.string().default(""),
-  viewport: z.string().default(""),
-  robots: z.string().default(""),
+export const beaconMetadataSchema = z.strictObject({
+  title: z.string().max(500).default(""),
+  description: z.string().max(2000).default(""),
+  canonical: z.string().max(2048).default(""),
+  ogTitle: z.string().max(500).default(""),
+  ogDescription: z.string().max(2000).default(""),
+  ogImage: z.string().max(2048).default(""),
+  viewport: z.string().max(200).default(""),
+  robots: z.string().max(200).default(""),
 });
 
-export const beaconContentSchema = z.object({
-  wordCount: z.number().int().nonnegative().default(0),
+export const beaconContentSchema = z.strictObject({
+  wordCount: count.default(0),
   headings: z
-    .object({
-      h1: z.number().int().nonnegative().default(0),
-      h2: z.number().int().nonnegative().default(0),
-      h3: z.number().int().nonnegative().default(0),
-      h4: z.number().int().nonnegative().default(0),
-      h5: z.number().int().nonnegative().default(0),
-      h6: z.number().int().nonnegative().default(0),
+    .strictObject({
+      h1: count.default(0),
+      h2: count.default(0),
+      h3: count.default(0),
+      h4: count.default(0),
+      h5: count.default(0),
+      h6: count.default(0),
     })
     .default({ h1: 0, h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 }),
-  h1Texts: z.array(z.string()).default([]),
-  imagesCount: z.number().int().nonnegative().default(0),
-  imagesWithAlt: z.number().int().nonnegative().default(0),
-  linksCount: z.number().int().nonnegative().default(0),
-  internalLinksCount: z.number().int().nonnegative().default(0),
-  externalLinksCount: z.number().int().nonnegative().default(0),
-  questionCount: z.number().int().nonnegative().default(0),
+  h1Texts: z.array(z.string().max(200)).max(10).default([]),
+  imagesCount: count.default(0),
+  imagesWithAlt: count.default(0),
+  linksCount: count.default(0),
+  internalLinksCount: count.default(0),
+  externalLinksCount: count.default(0),
+  questionCount: count.default(0),
 });
 
-export const beaconStructureSchema = z.object({
+export const beaconStructureSchema = z.strictObject({
   hasDoctype: z.boolean().default(false),
   hasHtmlLang: z.boolean().default(false),
   hasMain: z.boolean().default(false),
   headingOrder: z.boolean().default(true),
-  domDepth: z.number().int().nonnegative().default(0),
-  semanticRatio: z.number().nonnegative().default(0),
+  domDepth: z.number().int().nonnegative().max(10_000).default(0),
+  semanticRatio: z.number().nonnegative().max(100).default(0),
 });
 
-export const beaconPerformanceSchema = z.object({
-  firstContentfulPaint: z.number().nonnegative().optional(),
-  largestContentfulPaint: z.number().nonnegative().optional(),
-  domContentLoaded: z.number().nonnegative().optional(),
-  resourceCount: z.number().int().nonnegative().optional(),
+export const beaconPerformanceSchema = z.strictObject({
+  firstContentfulPaint: millis.optional(),
+  largestContentfulPaint: millis.optional(),
+  domContentLoaded: millis.optional(),
+  resourceCount: count.optional(),
 });
 
-export const beaconAccessibilitySchema = z.object({
-  imagesWithoutAlt: z.number().int().nonnegative().default(0),
-  linksWithoutText: z.number().int().nonnegative().default(0),
-  inputsWithoutLabels: z.number().int().nonnegative().default(0),
+export const beaconAccessibilitySchema = z.strictObject({
+  imagesWithoutAlt: count.default(0),
+  linksWithoutText: count.default(0),
+  inputsWithoutLabels: count.default(0),
   hasSkipLink: z.boolean().default(false),
   hasLandmarkRegions: z.boolean().default(false),
 });
 
-export const beaconAioSchema = z.object({
+export const beaconAioSchema = z.strictObject({
   hasStructuredData: z.boolean().default(false),
-  structuredDataCount: z.number().int().nonnegative().default(0),
-  schemaTypes: z.array(z.string()).default([]),
+  structuredDataCount: count.default(0),
+  schemaTypes: z.array(z.string().max(80)).max(32).default([]),
   hasFAQ: z.boolean().default(false),
   hasHowTo: z.boolean().default(false),
   hasClearDefinitions: z.boolean().default(false),
-  questionCount: z.number().int().nonnegative().default(0),
-  avgSentenceLength: z.number().nonnegative().optional(),
+  questionCount: count.default(0),
+  avgSentenceLength: z.number().nonnegative().max(10_000).optional(),
 });
 
-export const beaconPayloadSchema = z.object({
-  token: z.string().min(1).optional(),
-  url: z.string().url(),
-  timestamp: z.string().optional(),
+export const experimentEventSchema = z.strictObject({
+  type: z.enum(["impression", "engage", "vital"]),
+  metric: z.string().max(32).optional(),
+  value: z.number().min(0).max(1_000_000).default(0),
+});
+
+export const resolveQuerySchema = z.object({
+  token: z.string().min(1).max(MAX_TOKEN_LENGTH),
+  path: z.string().min(1).max(2048),
+  t: z.string().max(500).default(""),
+  d: z.string().max(2000).default(""),
+});
+
+export type ResolveQuery = z.infer<typeof resolveQuerySchema>;
+
+export const beaconPayloadSchema = z.strictObject({
+  token: z.string().min(1).max(MAX_TOKEN_LENGTH).optional(),
+  url: z.string().url().max(2048),
+  timestamp: z.string().max(64).optional(),
+  intent: z.enum(["audit", "experiment"]).default("audit"),
+  variantId: z.string().uuid().optional(),
+  events: z.array(experimentEventSchema).max(16).default([]),
   metadata: beaconMetadataSchema.default({
     title: "",
     description: "",
@@ -133,7 +157,7 @@ export const beaconPayloadSchema = z.object({
 
 export type BeaconPayload = z.infer<typeof beaconPayloadSchema>;
 
-export const scoreSchema = z.object({
+export const scoreSchema = z.strictObject({
   seo: z.number().min(0).max(100),
   aio: z.number().min(0).max(100),
   performance: z.number().min(0).max(100),
@@ -144,12 +168,12 @@ export const scoreSchema = z.object({
 
 export type Scores = z.infer<typeof scoreSchema>;
 
-export const findingSchema = z.object({
+export const findingSchema = z.strictObject({
   category: z.enum(["seo", "aio", "performance", "accessibility", "best-practices"]),
   severity: z.enum(["critical", "warning", "info"]),
-  title: z.string(),
-  message: z.string(),
-  fix: z.string().optional(),
+  title: z.string().max(200),
+  message: z.string().max(1000),
+  fix: z.string().max(500).optional(),
 });
 
 export type Finding = z.infer<typeof findingSchema>;

@@ -1,0 +1,91 @@
+- main [ref=e9]:
+  - generic [ref=e10]:
+    - navigation [ref=e13]:
+      - generic [ref=e14]:
+        - button "BRIK menu" [ref=e15] [cursor=pointer]
+        - generic [ref=e27]:
+          - generic [ref=e28]: Spatial Glass Viz
+          - generic [ref=e29]:
+            - button "Join" [ref=e30] [cursor=pointer]
+            - generic [ref=e32]:
+              - button "Share" [ref=e33] [cursor=pointer]
+              - button "Remix" [ref=e36] [cursor=pointer]
+              - button "Export" [ref=e39] [cursor=pointer]
+    - generic [ref=e45]:
+      - iframe [ref=e47]:
+        - generic [ref=f5e1]:
+          - generic [ref=f5e5]:
+            - generic [ref=f5e6]:
+              - generic [ref=f5e7]: W
+              - generic [ref=f5e8]:
+                - spinbutton [ref=f5e9]: "1920"
+                - generic [ref=f5e10]: px
+              - generic [ref=f5e11]: H
+              - generic [ref=f5e12]:
+                - spinbutton [ref=f5e13]: "1080"
+                - generic [ref=f5e14]: px
+            - combobox [ref=f5e15] [cursor=pointer]:
+              - option "Custom"
+              - option "HD 16:9" [selected]
+              - option "Square 1:1"
+              - option "4:3"
+              - option "Portrait 9:16"
+          - generic [ref=f5e16]:
+            - generic [ref=f5e17]:
+              - generic [ref=f5e18]:
+                - generic [ref=f5e19]: Spatial Glass Viz
+                - generic [ref=f5e23]:
+                  - text: by
+                  - button "Joe C Wales" [ref=f5e24] [cursor=pointer]
+              - button "Reset" [ref=f5e25] [cursor=pointer]
+            - generic [ref=f5e30]:
+              - generic [ref=f5e31] [cursor=pointer]: Controls
+              - generic [ref=f5e37] [cursor=pointer]:
+                - generic [ref=f5e38]: Environment & Camera
+                - generic [ref=f5e43]:
+                  - generic [ref=f5e44]: Camera Auto-Rotate
+                  - generic [ref=f5e52]:
+                    - generic [ref=f5e53]: Rotation Speed
+                    - generic [ref=f5e55]:
+                      - slider [ref=f5e58]: "0.2"
+                      - generic: "0.2"
+                  - generic [ref=f5e60]:
+                    - generic [ref=f5e61]: Color Theme
+                    - button "Spectral" [ref=f5e64]
+              - generic [ref=f5e66] [cursor=pointer]:
+                - generic [ref=f5e67]: Data Terrain
+                - generic [ref=f5e72]:
+                  - generic [ref=f5e74]:
+                    - generic [ref=f5e75]: Terrain Relief
+                    - generic [ref=f5e77]:
+                      - slider [ref=f5e80]: "11"
+                      - generic: "11"
+                  - generic [ref=f5e82]:
+                    - generic [ref=f5e83]: Hotspot Density
+                    - generic [ref=f5e85]:
+                      - slider [ref=f5e88]: "3.2"
+                      - generic: "3.2"
+                  - generic [ref=f5e90]:
+                    - generic [ref=f5e91]: Heat Map Intensity
+                    - generic [ref=f5e93]:
+                      - slider [ref=f5e96]: "0.5"
+                      - generic: "0.5"
+              - generic [ref=f5e97] [cursor=pointer]:
+                - generic [ref=f5e98]: Telemetry HUD
+                - generic [ref=f5e103]:
+                  - generic [ref=f5e105]:
+                    - generic [ref=f5e106]: Glass Opacity
+                    - generic [ref=f5e108]:
+                      - slider [ref=f5e111]: "0.95"
+                      - generic: "0.95"
+                  - generic [ref=f5e113]:
+                    - generic [ref=f5e114]: Glass Blur
+                    - generic [ref=f5e116]:
+                      - slider [ref=f5e119]: "2"
+                      - generic: "2"
+                  - generic [ref=f5e121]:
+                    - generic [ref=f5e122]: Data Refresh Rate
+                    - generic [ref=f5e124]:
+                      - slider [ref=f5e127]: "2"
+                      - generic: "2"
+      - button "Fullscreen" [ref=e48] [cursor=pointer]

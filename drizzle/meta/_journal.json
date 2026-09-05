@@ -8,6 +8,13 @@
       "when": 1787434596852,
       "tag": "0000_flowery_junta",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787502000000,
+      "tag": "0001_experiment_tables",
+      "breakpoints": true
     }
   ]
 }

@@ -27,6 +27,10 @@ bun run test
 bun run dev
 ```
 
+### Proprietary husk
+
+`terrain/` is NODE OUT internal. Topological shatter map of this repo — no time concat, no client DOM writes, not for distribution. `bun run terrain:husk`
+
 ### Stack
 
 Next.js 16 App Router · React 19 · Tailwind v4 · Postgres 16 · Drizzle · Zod · Vitest · Bun

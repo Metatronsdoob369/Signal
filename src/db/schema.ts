@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -60,5 +61,47 @@ export const findings = pgTable("findings", {
   title: text("title").notNull(),
   message: text("message").notNull(),
   fix: text("fix"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const pages = pgTable(
+  "pages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .references(() => sites.id)
+      .notNull(),
+    path: text("path").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique("pages_site_id_path_unique").on(table.siteId, table.path)],
+);
+
+export const variants = pgTable("variants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  pageId: uuid("page_id")
+    .references(() => pages.id)
+    .notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  isDefault: boolean("is_default").default(false).notNull(),
+  active: boolean("active").default(true).notNull(),
+  source: text("source").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const experimentEvents = pgTable("experiment_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  siteId: uuid("site_id")
+    .references(() => sites.id)
+    .notNull(),
+  pageId: uuid("page_id")
+    .references(() => pages.id)
+    .notNull(),
+  variantId: uuid("variant_id").references(() => variants.id),
+  type: text("type").notNull(),
+  metric: text("metric"),
+  value: numeric("value", { precision: 12, scale: 4 }).default("0").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

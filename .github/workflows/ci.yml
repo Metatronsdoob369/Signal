@@ -17,3 +17,44 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run test
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: signal
+          POSTGRES_PASSWORD: signal
+          POSTGRES_DB: signal
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U signal -d signal"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://signal:signal@localhost:5433/signal
+      APP_ORIGIN: http://localhost:3005
+      BASE_URL: http://localhost:3005
+      E2E_PORT: "3005"
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - run: bun install --frozen-lockfile
+      - run: bun run db:migrate
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+            artifacts/
+          retention-days: 14
