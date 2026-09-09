@@ -3,11 +3,12 @@ import { eq } from "drizzle-orm";
 import { createSiteSchema } from "@/contracts";
 import { db } from "@/db";
 import { sites } from "@/db/schema";
-import { MAX_REGISTER_BYTES, REGISTER_RATE } from "@/lib/hard-nos";
+import { scheduleCrawlRefresh } from "@/lib/crawl/store";
+import { MAX_REGISTER_BYTES, REGISTER_GLOBAL_RATE, REGISTER_RATE } from "@/lib/hard-nos";
 import { readJsonCapped } from "@/lib/payload-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { registerDomainError, requestIp } from "@/lib/tenant";
-import { generateSiteToken, hashToken } from "@/lib/token";
+import { generatePublicKey, generateSiteToken, hashToken } from "@/lib/token";
 
 export async function GET() {
   return NextResponse.json(
@@ -18,7 +19,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const ip = requestIp(request);
-  if (!checkRateLimit(`register:${ip}`, REGISTER_RATE).ok) {
+  if (
+    !checkRateLimit("register:global", REGISTER_GLOBAL_RATE).ok ||
+    !checkRateLimit(`register:${ip}`, REGISTER_RATE).ok
+  ) {
     return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
   }
 
@@ -40,17 +44,21 @@ export async function POST(request: NextRequest) {
     }
 
     const token = generateSiteToken();
+    const publicKey = generatePublicKey();
     const [site] = await db
       .insert(sites)
       .values({
         domain,
         name: name || domain,
         tokenHash: hashToken(token),
+        publicKey,
       })
       .returning();
 
+    scheduleCrawlRefresh({ id: site.id, domain: site.domain, crawlFactsAt: null });
+
     const origin = process.env.APP_ORIGIN || request.nextUrl.origin;
-    const embedCode = `<script defer src="${origin}/api/pack?token=${token}"></script>`;
+    const embedCode = `<script defer src="${origin}/api/pack?key=${publicKey}"></script>`;
 
     return NextResponse.json({
       success: true,
@@ -59,6 +67,7 @@ export async function POST(request: NextRequest) {
         domain: site.domain,
         name: site.name,
         token,
+        publicKey,
         embedCode,
         dashboardUrl: `${origin}/dashboard/${token}`,
       },

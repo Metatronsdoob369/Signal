@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { audits, findings, sites } from "@/db/schema";
 import { allowedBeaconOrigin, corsHeaders } from "@/lib/cors";
+import { scheduleCrawlRefresh, storedCrawlFacts } from "@/lib/crawl/store";
 import { BEACON_RATE, MAX_BEACON_BYTES } from "@/lib/hard-nos";
 import { parseBeaconPayload, readJsonCapped } from "@/lib/payload-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -15,26 +16,21 @@ function appOrigin(request: NextRequest): string {
   return process.env.APP_ORIGIN || request.nextUrl.origin;
 }
 
-function requestToken(request: NextRequest, bodyToken?: string): string {
-  return (
-    bodyToken ||
-    request.nextUrl.searchParams.get("token") ||
-    request.headers.get("x-signal-token") ||
-    ""
-  );
+function requestKey(request: NextRequest, bodyKey?: string): string {
+  return bodyKey || request.nextUrl.searchParams.get("key") || "";
 }
 
-async function loadSite(token: string) {
-  if (!token) return null;
-  const rows = await db.select().from(sites).where(eq(sites.tokenHash, hashToken(token))).limit(1);
+/** Sites are addressed by their public embed key here. The dashboard token never reaches this route. */
+async function loadSite(key: string) {
+  if (!key || key.length > 128) return null;
+  const rows = await db.select().from(sites).where(eq(sites.publicKey, key)).limit(1);
   const site = rows[0];
   if (!site || !siteMayServe(site)) return null;
   return site;
 }
 
 export async function OPTIONS(request: NextRequest) {
-  const token = request.nextUrl.searchParams.get("token") || request.headers.get("x-signal-token") || "";
-  const site = await loadSite(token);
+  const site = await loadSite(request.nextUrl.searchParams.get("key") || "");
   const allowOrigin = site
     ? allowedBeaconOrigin(request.headers.get("origin"), site.domain, appOrigin(request))
     : null;
@@ -46,10 +42,9 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const originHeader = request.headers.get("origin");
-  const tokenHint =
-    request.nextUrl.searchParams.get("token") || request.headers.get("x-signal-token") || "";
+  const keyHint = request.nextUrl.searchParams.get("key") || "";
   const ip = requestIp(request);
-  const rateKey = `beacon:${tokenHint ? hashToken(tokenHint) : ip}`;
+  const rateKey = `beacon:${keyHint ? hashToken(keyHint) : ip}`;
 
   if (!checkRateLimit(rateKey, BEACON_RATE).ok) {
     return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
@@ -64,18 +59,18 @@ export async function POST(request: NextRequest) {
     const body = raw.value && typeof raw.value === "object" ? (raw.value as Record<string, unknown>) : {};
     const parsed = parseBeaconPayload({
       ...body,
-      token: typeof body.token === "string" ? body.token : tokenHint,
+      key: typeof body.key === "string" ? body.key : keyHint,
     });
     if (!parsed.ok) {
       return NextResponse.json({ success: false, error: "Invalid payload" }, { status: 400 });
     }
 
-    const siteToken = requestToken(request, parsed.payload.token);
-    if (!siteToken) {
-      return NextResponse.json({ success: false, error: "Missing token" }, { status: 401 });
+    const siteKey = requestKey(request, parsed.payload.key);
+    if (!siteKey) {
+      return NextResponse.json({ success: false, error: "Missing key" }, { status: 401 });
     }
 
-    const site = await loadSite(siteToken);
+    const site = await loadSite(siteKey);
     if (!site) {
       return NextResponse.json({ success: false, error: "Site not found" }, { status: 404 });
     }
@@ -98,7 +93,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, recorded }, { headers });
     }
 
-    const { scores, findings: auditFindings } = scoreAudit(parsed.payload);
+    // Site-level robots.txt / llms.txt facts are read from the stored snapshot; a stale or
+    // missing snapshot refreshes after this response is sent, never on the beacon's clock.
+    scheduleCrawlRefresh(site);
+    const crawl = storedCrawlFacts(site);
+
+    const { scores, findings: auditFindings } = scoreAudit(parsed.payload, { crawl });
 
     const [audit] = await db
       .insert(audits)
@@ -127,6 +127,7 @@ export async function POST(request: NextRequest) {
         hasClearDefinitions: parsed.payload.aio.hasClearDefinitions,
         questionCount: parsed.payload.aio.questionCount || parsed.payload.content.questionCount,
         payload: {
+          packVersion: parsed.payload.packVersion ?? "0.1.0",
           metadata: parsed.payload.metadata,
           content: parsed.payload.content,
           structure: parsed.payload.structure,
@@ -134,6 +135,7 @@ export async function POST(request: NextRequest) {
           accessibility: parsed.payload.accessibility,
           aio: parsed.payload.aio,
         },
+        aioDimensions: scores.aioDimensions ?? null,
       })
       .returning();
 
@@ -146,6 +148,7 @@ export async function POST(request: NextRequest) {
           title: finding.title,
           message: finding.message,
           fix: finding.fix ?? null,
+          ruleId: finding.ruleId ?? null,
         })),
       );
     }

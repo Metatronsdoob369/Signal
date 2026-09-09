@@ -61,10 +61,10 @@ describe("parseBeaconPayload", () => {
     }
   });
 
-  it("caps token length", () => {
+  it("caps key length", () => {
     const result = parseBeaconPayload({
       url: "https://example.com/page",
-      token: "a".repeat(200),
+      key: "a".repeat(200),
     });
     expect(result.ok).toBe(false);
   });

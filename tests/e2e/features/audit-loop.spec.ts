@@ -12,7 +12,7 @@ test.describe("Audit loop", () => {
     const client = new ExampleClientPage(page);
     const dashboard = new DashboardPage(page);
 
-    await client.goto(site.token);
+    await client.goto(site.publicKey);
 
     await dashboard.goto(site.token);
     await expect(dashboard.siteDomain).toHaveText(site.domain);

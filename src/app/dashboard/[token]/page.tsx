@@ -1,23 +1,41 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { AIO_DIMENSIONS, aioDimensionScoreSchema } from "@/contracts";
 import { db } from "@/db";
 import { audits, findings, sites } from "@/db/schema";
+import { BOTS_AS_OF, KNOWN_BOTS } from "@/lib/crawl/bots";
+import { retrievalAccessSummary } from "@/lib/crawl/facts";
+import { storedCrawlFacts } from "@/lib/crawl/store";
 import { loadExperimentBoard } from "@/lib/experiment/store";
+import { AIO_DIMENSION_LABELS, AIO_DIMENSION_WEIGHTS } from "@/lib/rules/weights";
 import { hashToken } from "@/lib/token";
 
 export const dynamic = "force-dynamic";
+
+/** Dashboard URLs carry the site token; they must never be indexed or followed. */
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 type PageProps = {
   params: Promise<{ token: string }>;
   searchParams: Promise<{ new?: string }>;
 };
 
+const dimensionsSchema = z.record(z.enum(AIO_DIMENSIONS), aioDimensionScoreSchema);
+
 function scoreColor(score: number): string {
   if (score >= 80) return "text-emerald-700";
   if (score >= 60) return "text-amber-700";
   return "text-red-700";
 }
+
+const ROLE_LABEL = { fetcher: "Answer-time fetch", search: "AI search index", trainer: "Training crawl" } as const;
+const ACCESS_LABEL = {
+  ok: { allow: "Allowed", disallow: "Blocked", unspecified: "No rule (allowed)" },
+  missing: { allow: "Allowed", disallow: "Blocked", unspecified: "No robots.txt (allowed)" },
+} as const;
 
 export default async function DashboardPage({ params, searchParams }: PageProps) {
   const { token } = await params;
@@ -51,8 +69,13 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
 
   const experimentBoard = await loadExperimentBoard(site.id);
 
+  const crawl = storedCrawlFacts(site);
+  const access = retrievalAccessSummary(crawl);
+  const parsedDimensions = latestAudit ? dimensionsSchema.safeParse(latestAudit.aioDimensions) : null;
+  const dimensions = parsedDimensions?.success ? parsedDimensions.data : null;
+
   const origin = process.env.APP_ORIGIN || "http://localhost:3000";
-  const embedCode = `<script defer src="${origin}/api/pack?token=${token}"></script>`;
+  const embedCode = `<script defer src="${origin}/api/pack?key=${site.publicKey}"></script>`;
 
   const seo = Number(site.seoScore ?? latestAudit?.seoScore ?? 0);
   const aio = Number(site.aioScore ?? latestAudit?.aioScore ?? 0);
@@ -81,7 +104,8 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
               {token}
             </p>
             <p className="mt-4 text-sm text-[var(--muted)]">
-              This URL is the dashboard. Anyone with the token can see this site&apos;s audits.
+              This URL is the dashboard. Anyone with this token can see this site&apos;s audits. The embed key
+              below is public and cannot open the dashboard.
             </p>
           </div>
         ) : null}
@@ -92,6 +116,13 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
               {site.name || site.domain}
             </h1>
             <p className="mt-1 font-mono text-sm text-[var(--muted)]">{site.domain}</p>
+            <p className="mt-2 font-mono text-xs text-[var(--muted)]" data-testid="crawl-access-summary">
+              {access
+                ? `AI crawler access: ${access.allowed} of ${access.total} retrieval agents allowed`
+                : crawl
+                  ? "AI crawler access: robots.txt read failed, retrying"
+                  : "AI crawler access: not checked yet"}
+            </p>
           </div>
           <div className="flex gap-8" data-testid="scores">
             <div>
@@ -133,13 +164,120 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
             Or open{" "}
             <a
               className="underline"
-              href={`/example-client-page.html?token=${token}`}
+              href={`/example-client-page.html?key=${site.publicKey}`}
               data-testid="example-client-link"
             >
               the example client page
             </a>{" "}
-            with this token.
+            with this site&apos;s embed key.
           </p>
+        </section>
+
+        <section className="mt-10" data-testid="aio-breakdown">
+          <h2 className="font-mono text-sm font-medium">AI readiness breakdown</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Five deterministic dimensions from the latest audit. Weights are v0.2 priors; a dimension reads
+            &ldquo;unknown&rdquo; when Signal has no evidence for it yet.
+          </p>
+          {dimensions ? (
+            <div className="mt-4 overflow-x-auto border border-[var(--line)] bg-white">
+              <table className="min-w-full text-left font-mono text-xs">
+                <thead className="border-b border-[var(--line)] text-[var(--muted)]">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Dimension</th>
+                    <th className="px-4 py-3 font-medium">Weight</th>
+                    <th className="px-4 py-3 font-medium">Score</th>
+                    <th className="px-4 py-3 font-medium">Rules passed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {AIO_DIMENSIONS.map((dimension) => {
+                    const row = dimensions[dimension];
+                    return (
+                      <tr key={dimension} className="border-b border-[var(--line)] last:border-0">
+                        <td className="px-4 py-3">{AIO_DIMENSION_LABELS[dimension]}</td>
+                        <td className="px-4 py-3 text-[var(--muted)]">{AIO_DIMENSION_WEIGHTS[dimension]}</td>
+                        <td
+                          className={`px-4 py-3 font-semibold ${row?.score === null || row?.score === undefined ? "text-[var(--muted)]" : scoreColor(row.score)}`}
+                          data-testid={`dimension-${dimension}`}
+                        >
+                          {row?.score === null || row?.score === undefined ? "unknown" : row.score}
+                        </td>
+                        <td className="px-4 py-3 text-[var(--muted)]">
+                          {row ? `${row.passed} / ${row.applicable}` : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-[var(--muted)]" data-testid="aio-breakdown-empty">
+              No v0.2 audit yet. Load a page with the embed script.
+            </p>
+          )}
+        </section>
+
+        <section className="mt-10" data-testid="crawl-access">
+          <h2 className="font-mono text-sm font-medium">AI crawler access</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Read from this site&apos;s robots.txt and llms.txt by Signal&apos;s server, refreshed daily. Answer-time
+            fetchers and AI search indexes are scored; training crawlers are reported only, since blocking them
+            is a policy choice. Agent list as of {BOTS_AS_OF}.
+          </p>
+          {crawl ? (
+            <div className="mt-4 overflow-x-auto border border-[var(--line)] bg-white">
+              <div className="flex flex-wrap gap-6 border-b border-[var(--line)] px-4 py-3 font-mono text-xs text-[var(--muted)]">
+                <span data-testid="robots-status">robots.txt: {crawl.robots.status}</span>
+                <span>sitemap declared: {crawl.robots.sitemapDeclared ? "yes" : "no"}</span>
+                <span data-testid="llms-status">llms.txt: {crawl.llmsTxt.status}</span>
+                <span>checked {new Date(crawl.fetchedAt).toISOString()}</span>
+              </div>
+              {crawl.robots.status === "error" ? (
+                <p className="px-4 py-4 text-sm text-[var(--muted)]" data-testid="crawl-access-error">
+                  robots.txt could not be read, so per-agent policy is unknown. Signal retries within the
+                  hour; the crawl dimension stays excluded until a read succeeds.
+                </p>
+              ) : (
+              <table className="min-w-full text-left font-mono text-xs">
+                <thead className="border-b border-[var(--line)] text-[var(--muted)]">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Agent</th>
+                    <th className="px-4 py-3 font-medium">Vendor</th>
+                    <th className="px-4 py-3 font-medium">Role</th>
+                    <th className="px-4 py-3 font-medium">Site root</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {KNOWN_BOTS.map((bot) => {
+                    const state = crawl.robots.bots[bot.token] ?? "unspecified";
+                    const blocked = state === "disallow";
+                    const scored = bot.role !== "trainer";
+                    const labels = ACCESS_LABEL[crawl.robots.status === "missing" ? "missing" : "ok"];
+                    return (
+                      <tr key={bot.token} className="border-b border-[var(--line)] last:border-0">
+                        <td className="px-4 py-3">{bot.token}</td>
+                        <td className="px-4 py-3 text-[var(--muted)]">{bot.vendor}</td>
+                        <td className="px-4 py-3 text-[var(--muted)]">
+                          {ROLE_LABEL[bot.role]}
+                          {scored ? "" : " · not scored"}
+                        </td>
+                        <td className={`px-4 py-3 ${blocked ? (scored ? "text-red-700" : "text-amber-700") : "text-emerald-700"}`}>
+                          {labels[state]}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              )}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-[var(--muted)]" data-testid="crawl-access-empty">
+              Not checked yet. Signal reads robots.txt after the first beacon.
+            </p>
+          )}
         </section>
 
         <section className="mt-10" data-testid="experiments">
@@ -207,13 +345,18 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
             >
               {latestFindings.map((finding) => (
                 <li key={finding.id} className="px-4 py-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <span className="font-mono text-[10px] uppercase tracking-wide text-[var(--muted)]">
                       {finding.severity}
                     </span>
                     <span className="font-mono text-[10px] uppercase tracking-wide text-[var(--muted)]">
                       {finding.category}
                     </span>
+                    {finding.ruleId ? (
+                      <span className="font-mono text-[10px] tracking-wide text-[var(--muted)]">
+                        {finding.ruleId}
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-1 font-mono text-sm font-medium">{finding.title}</p>
                   <p className="mt-1 text-sm text-[var(--muted)]">{finding.message}</p>

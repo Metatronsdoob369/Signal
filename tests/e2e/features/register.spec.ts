@@ -15,7 +15,8 @@ test.describe("Register", () => {
 
     await expect(dashboard.tokenBanner).toBeVisible();
     await expect(dashboard.siteDomain).toHaveText(domain);
-    await expect(dashboard.embedCode).toContainText("/api/pack?token=");
+    await expect(dashboard.embedCode).toContainText("/api/pack?key=");
+    await expect(dashboard.embedCode).not.toContainText(await dashboard.siteToken.innerText());
     await expect(dashboard.experimentsEmpty).toBeVisible();
     await expect(dashboard.findingsEmpty).toBeVisible();
     await expect(dashboard.auditsEmpty).toBeVisible();

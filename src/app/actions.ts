@@ -6,10 +6,11 @@ import { eq } from "drizzle-orm";
 import { createSiteSchema } from "@/contracts";
 import { db } from "@/db";
 import { sites } from "@/db/schema";
-import { REGISTER_RATE } from "@/lib/hard-nos";
+import { scheduleCrawlRefresh } from "@/lib/crawl/store";
+import { REGISTER_GLOBAL_RATE, REGISTER_RATE } from "@/lib/hard-nos";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { registerDomainError } from "@/lib/tenant";
-import { generateSiteToken, hashToken } from "@/lib/token";
+import { clientIp, registerDomainError } from "@/lib/tenant";
+import { generatePublicKey, generateSiteToken, hashToken } from "@/lib/token";
 
 export type CreateSiteState = {
   error?: string;
@@ -24,8 +25,11 @@ export async function createSite(
   formData: FormData,
 ): Promise<CreateSiteState> {
   const headerList = await headers();
-  const ip = headerList.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (!checkRateLimit(`register:${ip}`, REGISTER_RATE).ok) {
+  const ip = clientIp(headerList);
+  if (
+    !checkRateLimit("register:global", REGISTER_GLOBAL_RATE).ok ||
+    !checkRateLimit(`register:${ip}`, REGISTER_RATE).ok
+  ) {
     return { error: "Too many requests" };
   }
 
@@ -45,12 +49,18 @@ export async function createSite(
   }
 
   const token = generateSiteToken();
+  const publicKey = generatePublicKey();
   try {
-    await db.insert(sites).values({
-      domain,
-      name: name || domain,
-      tokenHash: hashToken(token),
-    });
+    const [created] = await db
+      .insert(sites)
+      .values({
+        domain,
+        name: name || domain,
+        tokenHash: hashToken(token),
+        publicKey,
+      })
+      .returning();
+    scheduleCrawlRefresh({ id: created.id, domain: created.domain, crawlFactsAt: null });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "23505") {
       return { error: registerDomainError() };

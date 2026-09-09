@@ -1,0 +1,110 @@
+# Signal CI on Buildkite — a downstream sketch mirroring .github/workflows/ci.yml.
+# No Buildkite org is wired yet; this file is here so the shape of the pipeline is visible
+# before anyone commits to the move. Static YAML on purpose: the steps do not change per build.
+
+env:
+  DATABASE_URL: "postgresql://signal:signal@localhost:5433/signal"
+  APP_ORIGIN: "http://localhost:3005"
+  BASE_URL: "http://localhost:3005"
+  E2E_PORT: "3005"
+  CI: "true"
+
+steps:
+  - label: ":bun: Install"
+    key: install
+    command: "bun install --frozen-lockfile"
+    plugins:
+      - cache#v1.8.1:
+          paths:
+            - "node_modules/"
+          manifest: "bun.lock"
+
+  - label: ":eslint: Lint"
+    key: lint
+    depends_on: install
+    command: "bun run lint"
+    plugins:
+      - cache#v1.8.1:
+          paths:
+            - "node_modules/"
+          manifest: "bun.lock"
+
+  - label: ":typescript: Typecheck"
+    key: typecheck
+    depends_on: install
+    command: "bun run typecheck"
+    plugins:
+      - cache#v1.8.1:
+          paths:
+            - "node_modules/"
+          manifest: "bun.lock"
+
+  - label: ":test_tube: Unit, rule catalog, pack contract"
+    key: unit
+    depends_on: install
+    command: |
+      set -euo pipefail
+      if ! bun run test 2>&1 | tee unit-output.txt; then
+        buildkite-agent annotate --style "error" --context "unit" < unit-output.txt
+        exit 1
+      fi
+    plugins:
+      - cache#v1.8.1:
+          paths:
+            - "node_modules/"
+          manifest: "bun.lock"
+
+  # Every new collector grows the served pack. This gate reports the byte size on the build
+  # page and fails when it passes PACK_MAX_BYTES, so growth is a decision rather than drift.
+  - label: ":package: Pack byte budget"
+    key: pack-budget
+    depends_on: install
+    if_changed:
+      - "src/lib/pack-script.ts"
+      - "src/lib/hard-nos.ts"
+      - "src/contracts/**"
+    command: |
+      set -euo pipefail
+      SIZE=$(bun -e "const m = await import('./src/lib/pack-script.ts'); const s = m.buildPackScript({ token: 'x', origin: 'https://x' }); console.log(Buffer.byteLength(s, 'utf8'))")
+      MAX=$(bun -e "const m = await import('./src/lib/pack-script.ts'); console.log(m.PACK_MAX_BYTES)")
+      echo "Pack: ${SIZE} bytes of ${MAX} budget" | buildkite-agent annotate --style "info" --context "pack-budget"
+      test "$SIZE" -le "$MAX"
+    plugins:
+      - cache#v1.8.1:
+          paths:
+            - "node_modules/"
+          manifest: "bun.lock"
+
+  - label: ":playwright: End to end"
+    key: e2e
+    depends_on:
+      - typecheck
+      - unit
+    command: |
+      set -euo pipefail
+      docker compose up -d postgres
+      for i in $(seq 1 30); do
+        docker compose exec -T postgres pg_isready -U signal -d signal && break
+        sleep 2
+      done
+      bun run db:migrate
+      bunx playwright install --with-deps chromium
+      if ! bun run test:e2e 2>&1 | tee e2e-output.txt; then
+        buildkite-agent annotate --style "error" --context "e2e" < e2e-output.txt
+        exit 1
+      fi
+    artifact_paths:
+      - "playwright-report/**/*"
+      - "test-results/**/*"
+      - "artifacts/**/*"
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 143
+          limit: 2
+    plugins:
+      - cache#v1.8.1:
+          paths:
+            - "node_modules/"
+          manifest: "bun.lock"

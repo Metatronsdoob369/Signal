@@ -7,7 +7,7 @@ export class ExampleClientPage {
     this.page = page;
   }
 
-  async goto(token: string) {
+  async goto(key: string) {
     const resolve = this.page.waitForResponse(
       (response) =>
         response.url().includes("/api/resolve") &&
@@ -15,7 +15,7 @@ export class ExampleClientPage {
         response.ok(),
     );
     const beacon = this.page.waitForResponse((response) => this.isAuditBeacon(response));
-    await this.page.goto(`/example-client-page.html?token=${encodeURIComponent(token)}`);
+    await this.page.goto(`/example-client-page.html?key=${encodeURIComponent(key)}`);
     await this.page.getByRole("heading", { name: /Signal example client page/i }).waitFor({
       state: "visible",
     });
