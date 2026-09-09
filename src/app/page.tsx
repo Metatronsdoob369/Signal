@@ -30,7 +30,7 @@ export default function HomePage() {
             <span className="font-mono text-xs text-[var(--muted)]">index.html</span>
           </div>
           <pre className="mt-4 overflow-x-auto font-mono text-sm leading-relaxed text-[var(--ink)]">
-            <code>{`<script defer src="https://your-origin/api/pack?token=…"></script>`}</code>
+            <code>{`<script defer src="https://your-origin/api/pack?key=…"></script>`}</code>
           </pre>
         </div>
       </section>

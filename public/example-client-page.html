@@ -3,24 +3,64 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Signal Example Client Page</title>
+    <title>Signal Example Client Page: How the Embed Audit Works</title>
     <meta
       name="description"
-      content="A demo page used to verify Signal's embed script, SEO scoring, and AIO structured-data checks end to end."
+      content="A demo page used to verify Signal's embed script, SEO scoring, and AI-readiness checks end to end, with structured data, question headings, and direct answers."
     />
+    <meta name="author" content="Signal" />
+    <meta name="robots" content="index, follow" />
     <link rel="canonical" href="http://localhost:3000/example-client-page.html" />
-    <meta property="og:title" content="Signal Example Client Page" />
+    <meta property="og:title" content="Signal Example Client Page: How the Embed Audit Works" />
     <meta
       property="og:description"
-      content="Demo page for Signal embed verification."
+      content="A demo page used to verify Signal's embed script, SEO scoring, and AI-readiness checks end to end."
     />
     <meta property="og:image" content="http://localhost:3000/og.png" />
+    <meta property="og:url" content="http://localhost:3000/example-client-page.html" />
+    <meta property="article:published_time" content="2026-08-22T00:00:00Z" />
+    <meta property="article:modified_time" content="2026-09-09T00:00:00Z" />
+    <meta name="twitter:card" content="summary_large_image" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebPage",
-        "name": "Signal Example Client Page",
-        "description": "Demo page for Signal embed verification."
+        "@graph": [
+          {
+            "@type": "Organization",
+            "name": "Signal",
+            "url": "http://localhost:3000/",
+            "logo": "http://localhost:3000/next.svg",
+            "sameAs": ["https://github.com/Metatronsdoob369"]
+          },
+          {
+            "@type": "WebPage",
+            "name": "Signal Example Client Page",
+            "description": "Demo page for Signal embed verification.",
+            "datePublished": "2026-08-22",
+            "dateModified": "2026-09-09"
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "How do you verify Signal?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Open this page with a valid key query string and check the dashboard for a new audit row."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What does the pack send?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Counts, booleans, and head metadata. Never page prose or markup."
+                }
+              }
+            ]
+          }
+        ]
       }
     </script>
     <style>
@@ -37,49 +77,114 @@
         font-family: ui-monospace, monospace;
         font-size: 0.875rem;
       }
+      .byline {
+        color: #555;
+        font-size: 0.9rem;
+      }
     </style>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
+    <header>
+      <nav aria-label="Demo navigation">
+        <a href="/">Signal home</a> · <a href="/dashboard">Dashboards</a> ·
+        <a href="/example-client-page.html">This page</a>
+      </nav>
+    </header>
     <main id="main">
-      <h1>Signal example client page</h1>
-      <p>
-        Signal is an embeddable audit pack. This page is intentionally structured so a real
-        beacon can score SEO and AIO signals without touching Property Hydra.
-      </p>
-      <h2>What this page includes</h2>
-      <ul>
-        <li>Title and meta description</li>
-        <li>Canonical and Open Graph tags</li>
-        <li>One H1, supporting H2</li>
-        <li>JSON-LD WebPage structured data</li>
-        <li>Landmark region via main</li>
-      </ul>
-      <p>
-        SEO means search engine optimization. AIO means AI optimization for citation readiness.
-        Clear definitions help both humans and machines.
-      </p>
-      <p>
-        How do you verify Signal? Open this page with a valid token query string. What should you
-        see next? A new audit row on the dashboard. Why does that matter? It proves the wedge works.
-      </p>
-      <img src="/file.svg" alt="Demo file icon" width="48" height="48" />
+      <article>
+        <h1>Signal example client page</h1>
+        <p class="byline">
+          By <a rel="author" href="/">Signal</a> · Updated
+          <time datetime="2026-09-09">9 September 2026</time>
+        </p>
+        <p>
+          Signal is an embeddable audit pack that reads structured signals from a page on load and scores
+          them deterministically. This page is intentionally structured so a real beacon can score SEO and
+          AI-readiness signals without touching any other product.
+        </p>
+
+        <h2>Key takeaways</h2>
+        <ul>
+          <li>One script tag, one embed key, one dashboard.</li>
+          <li>Structured signals only: counts, booleans, and head metadata.</li>
+          <li>No cloud model on the ingest path.</li>
+        </ul>
+
+        <h2>What does the pack collect?</h2>
+        <p>
+          The pack collects head metadata such as the title, meta description, canonical link, and Open Graph
+          tags, together with heading levels, paragraph and sentence counts, image and link counts, JSON-LD
+          types with their property names, and browser performance timings. Body text is measured locally and
+          only the numbers leave the page.
+        </p>
+
+        <h2>How do you verify Signal?</h2>
+        <p>
+          Open this page with a valid embed key query string, then refresh the dashboard for that site. A new
+          audit row appears with scores and findings, and the experiments board seeds a title variant for this
+          path. That single round trip proves the wedge works end to end.
+        </p>
+
+        <h2>Why does structured data matter for AI readiness?</h2>
+        <p>
+          Structured data is a machine-readable statement of what a page is and who stands behind it. Answer
+          engines lean on it to decide whether a page can be quoted, so an Organization node with sameAs links
+          and a page-type node such as FAQPage or Article move the AI-readiness dimensions more than any other
+          single change.
+        </p>
+        <h3>What this page includes</h3>
+        <table>
+          <caption>Signals present on this page</caption>
+          <thead>
+            <tr>
+              <th scope="col">Signal</th>
+              <th scope="col">Where</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Title, description, canonical</td>
+              <td>head</td>
+            </tr>
+            <tr>
+              <td>Organization, WebPage, FAQPage JSON-LD</td>
+              <td>head</td>
+            </tr>
+            <tr>
+              <td>Question headings with direct answers</td>
+              <td>body</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          SEO means search engine optimization. AIO means AI optimization for citation readiness. Clear
+          definitions help both humans and machines, and outbound references such as
+          <a href="https://schema.org/FAQPage">the schema.org FAQPage type</a> give a model something to
+          check against.
+        </p>
+        <img src="/file.svg" alt="Demo file icon" width="48" height="48" loading="lazy" />
+      </article>
     </main>
+    <footer>
+      <p>Demo footer. <a href="/example-client-page.html#main">Back to top</a></p>
+    </footer>
     <script>
       (function () {
         var params = new URLSearchParams(location.search);
-        var token = params.get("token");
-        if (!token) {
-          document.body.insertAdjacentHTML(
-            "beforeend",
-            "<p><code>Add ?token=YOUR_TOKEN to this URL.</code></p>"
-          );
+        var key = params.get("key");
+        if (!key) {
+          var note = document.createElement("p");
+          var code = document.createElement("code");
+          code.textContent = "Add ?key=YOUR_EMBED_KEY to this URL.";
+          note.appendChild(code);
+          document.body.appendChild(note);
           return;
         }
         var origin = location.origin;
         var s = document.createElement("script");
         s.defer = true;
-        s.src = origin + "/api/pack?token=" + encodeURIComponent(token);
+        s.src = origin + "/api/pack?key=" + encodeURIComponent(key);
         document.body.appendChild(s);
       })();
     </script>

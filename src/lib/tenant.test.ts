@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { createSiteSchema } from "@/contracts";
 import {
   beaconBoundToSite,
+  clientIp,
   hostMatchesSite,
   isValidHostname,
   registerDomainError,
   siteMayServe,
+  trustedProxyHops,
 } from "@/lib/tenant";
 
 describe("isValidHostname", () => {
@@ -19,6 +21,26 @@ describe("isValidHostname", () => {
     expect(isValidHostname("127.0.0.1")).toBe(false);
     expect(isValidHostname("not a domain")).toBe(false);
     expect(isValidHostname("example")).toBe(false);
+  });
+
+  it("rejects reserved and private-network suffixes the server must never fetch", () => {
+    for (const domain of [
+      "api.localhost",
+      "printer.local",
+      "vault.internal",
+      "nas.lan",
+      "router.home",
+      "wiki.intranet",
+      "db.corp",
+      "site.test",
+      "site.invalid",
+      "site.example",
+      "hidden.onion",
+    ]) {
+      expect(isValidHostname(domain)).toBe(false);
+    }
+    expect(isValidHostname("example.com")).toBe(true);
+    expect(isValidHostname("localhost.com")).toBe(true);
   });
 });
 
@@ -90,5 +112,46 @@ describe("siteMayServe", () => {
 describe("registerDomainError", () => {
   it("does not distinguish taken domains from invalid ones", () => {
     expect(registerDomainError()).toBe("Unable to register domain");
+  });
+});
+
+describe("clientIp", () => {
+  const headers = (forwarded?: string, realIp?: string) => {
+    const h = new Headers();
+    if (forwarded !== undefined) h.set("x-forwarded-for", forwarded);
+    if (realIp !== undefined) h.set("x-real-ip", realIp);
+    return h;
+  };
+
+  it("reads the entry appended by the nearest trusted proxy, not the caller's first entry", () => {
+    expect(clientIp(headers("1.2.3.4"), 1)).toBe("1.2.3.4");
+    expect(clientIp(headers("spoofed, 1.2.3.4"), 1)).toBe("1.2.3.4");
+    expect(clientIp(headers("spoofed, 1.2.3.4, 10.0.0.9"), 2)).toBe("1.2.3.4");
+  });
+
+  it("does not trust a header shorter than the proxy chain", () => {
+    expect(clientIp(headers("1.2.3.4"), 2)).toBe("unknown");
+    expect(clientIp(headers(""), 1)).toBe("unknown");
+  });
+
+  it("uses one shared bucket when no proxy is trusted", () => {
+    expect(clientIp(headers("1.2.3.4"), 0)).toBe("unknown");
+    expect(clientIp(headers(undefined, "1.2.3.4"), 0)).toBe("unknown");
+  });
+
+  it("falls back to x-real-ip behind a trusted proxy", () => {
+    expect(clientIp(headers(undefined, "9.9.9.9"), 1)).toBe("9.9.9.9");
+    expect(clientIp(headers(), 1)).toBe("unknown");
+  });
+});
+
+describe("trustedProxyHops", () => {
+  it("defaults to zero, trusting nothing until configured, and rejects junk", () => {
+    expect(trustedProxyHops({})).toBe(0);
+    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: "" })).toBe(0);
+    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: "0" })).toBe(0);
+    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: "3" })).toBe(3);
+    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: "-1" })).toBe(0);
+    expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: "many" })).toBe(0);
   });
 });

@@ -4,7 +4,6 @@ import { db } from "@/db";
 import { sites } from "@/db/schema";
 import { buildPackScript } from "@/lib/pack-script";
 import { siteMayServe } from "@/lib/tenant";
-import { hashToken } from "@/lib/token";
 
 const UNAVAILABLE = "// Signal pack: unavailable";
 
@@ -14,12 +13,12 @@ const packHeaders = {
 } as const;
 
 export async function GET(request: NextRequest) {
-  const token = request.nextUrl.searchParams.get("token");
-  if (!token) {
+  const key = request.nextUrl.searchParams.get("key");
+  if (!key || key.length > 128) {
     return new NextResponse(UNAVAILABLE, { status: 404, headers: packHeaders });
   }
 
-  const rows = await db.select().from(sites).where(eq(sites.tokenHash, hashToken(token))).limit(1);
+  const rows = await db.select().from(sites).where(eq(sites.publicKey, key)).limit(1);
   const site = rows[0];
 
   if (!site || !siteMayServe(site)) {
@@ -27,7 +26,7 @@ export async function GET(request: NextRequest) {
   }
 
   const origin = process.env.APP_ORIGIN || request.nextUrl.origin;
-  const script = buildPackScript({ token, origin });
+  const script = buildPackScript({ key, origin });
 
   return new NextResponse(script, {
     status: 200,

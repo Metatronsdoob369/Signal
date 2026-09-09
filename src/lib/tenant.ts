@@ -1,3 +1,21 @@
+/**
+ * Reserved and private-network suffixes. Signal's server fetches robots.txt for every
+ * registered host, so names that can only resolve inside a private network are refused.
+ */
+const RESERVED_TLDS = new Set([
+  "localhost",
+  "local",
+  "internal",
+  "lan",
+  "home",
+  "intranet",
+  "corp",
+  "test",
+  "invalid",
+  "example",
+  "onion",
+]);
+
 export function isValidHostname(domain: string): boolean {
   if (!domain || domain.length > 253) return false;
   if (domain.includes(":") || domain.includes("/") || /\s/.test(domain)) return false;
@@ -13,8 +31,10 @@ export function isValidHostname(domain: string): boolean {
     return false;
   }
   const tld = labels[labels.length - 1];
-  return /^[a-z]{2,}$/.test(tld);
+  if (!/^[a-z]{2,}$/.test(tld)) return false;
+  return !RESERVED_TLDS.has(tld);
 }
+
 
 export function normalizeHost(host: string): string {
   return host.toLowerCase().replace(/\.$/, "").replace(/:\d+$/, "");
@@ -75,10 +95,39 @@ export function registerDomainError(): string {
   return "Unable to register domain";
 }
 
-export function requestIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
+const DEFAULT_TRUSTED_PROXY_HOPS = 0;
+
+/**
+ * How many proxies in front of Signal append to X-Forwarded-For. Unset means none: a forged
+ * header is then ignored and every caller shares one bucket. Production sets the real count.
+ */
+export function trustedProxyHops(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.TRUSTED_PROXY_HOPS;
+  if (raw === undefined || raw === "") return DEFAULT_TRUSTED_PROXY_HOPS;
+  const hops = Number(raw);
+  return Number.isInteger(hops) && hops >= 0 ? hops : DEFAULT_TRUSTED_PROXY_HOPS;
+}
+
+/**
+ * Client address for rate limiting. The leftmost X-Forwarded-For entry is written by the
+ * caller and cannot be trusted, so the address is read from the right: with N trusted
+ * proxies in front, the N-th entry from the end is the one the edge proxy appended.
+ * Without a trusted proxy every caller shares one anonymous bucket.
+ */
+export function clientIp(headers: Headers, hops: number = trustedProxyHops()): string {
+  if (hops <= 0) return "unknown";
+  const forwarded = headers.get("x-forwarded-for");
   if (forwarded) {
-    return forwarded.split(",")[0]?.trim() || "unknown";
+    const entries = forwarded
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    const index = entries.length - hops;
+    return index >= 0 ? entries[index] : "unknown";
   }
-  return request.headers.get("x-real-ip") || "unknown";
+  return headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+export function requestIp(request: Request): string {
+  return clientIp(request.headers);
 }

@@ -6,6 +6,8 @@ export const MAX_TOKEN_LENGTH = 128;
 
 export const BEACON_RATE = { windowMs: 60_000, max: 30 } as const;
 export const REGISTER_RATE = { windowMs: 60 * 60 * 1000, max: 10 } as const;
+/** Every registration triggers an outbound robots.txt read, so the total is capped too. */
+export const REGISTER_GLOBAL_RATE = { windowMs: 60 * 60 * 1000, max: 60 } as const;
 
 export const FORBIDDEN_CONTENT_KEYS = [
   "html",
