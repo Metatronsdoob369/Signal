@@ -49,6 +49,24 @@ export function hostMatchesSite(host: string, siteDomain: string): boolean {
   return hostname.endsWith(`.${domain}`);
 }
 
+/**
+ * Which side of the tenant boundary a page lives on. "site" is the registered domain (with www
+ * and subdomains); "app" is anything else that the beacon binding let through, which is only
+ * Signal's own origin serving the example page. Only site-scope pages may feed a site's
+ * headline, breakdown, findings, and experiments.
+ */
+export type PageScope = "site" | "app";
+
+export function pageScope(url: string, siteDomain: string): PageScope | null {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return null;
+  }
+  return hostMatchesSite(host, siteDomain) ? "site" : "app";
+}
+
 function hostAllowedForBeacon(host: string, siteDomain: string, appOrigin?: string): boolean {
   if (hostMatchesSite(host, siteDomain)) return true;
   if (!appOrigin) return false;

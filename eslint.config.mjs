@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Test and dogfood outputs (screenshots, harness scripts), never source.
+    "artifacts/**",
   ]),
 ]);
 

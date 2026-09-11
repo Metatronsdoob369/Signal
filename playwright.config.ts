@@ -24,6 +24,14 @@ export default defineConfig({
     video: "retain-on-failure",
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
+    // client-origin.spec serves a client page on a public https origin that loads the pack from
+    // loopback. Chromium's private/local network access checks would stall that; they are browser
+    // policy, not Signal behavior, and never apply to a deployed Signal origin.
+    launchOptions: {
+      args: [
+        "--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults,LocalNetworkAccessChecks",
+      ],
+    },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {

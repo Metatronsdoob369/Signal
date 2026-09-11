@@ -17,6 +17,11 @@ export class DashboardPage {
   readonly findingsList: Locator;
   readonly auditsEmpty: Locator;
   readonly auditsTable: Locator;
+  readonly headlineEmpty: Locator;
+  readonly exampleAudit: Locator;
+  readonly exampleScoreOverall: Locator;
+  readonly experimentsToggle: Locator;
+  readonly experimentsState: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -35,6 +40,11 @@ export class DashboardPage {
     this.findingsList = page.getByTestId("findings-list");
     this.auditsEmpty = page.getByTestId("audits-empty");
     this.auditsTable = page.getByTestId("audits-table");
+    this.headlineEmpty = page.getByTestId("headline-empty");
+    this.exampleAudit = page.getByTestId("example-audit");
+    this.exampleScoreOverall = page.getByTestId("example-score-overall");
+    this.experimentsToggle = page.getByTestId("experiments-toggle");
+    this.experimentsState = page.getByTestId("experiments-state");
   }
 
   async goto(token: string) {
