@@ -1,0 +1,1 @@
+ALTER TABLE "sites" ADD COLUMN "experiments_enabled" boolean DEFAULT false NOT NULL;

@@ -1,13 +1,13 @@
 "use server";
 
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { createSiteSchema } from "@/contracts";
 import { db } from "@/db";
 import { sites } from "@/db/schema";
 import { scheduleCrawlRefresh } from "@/lib/crawl/store";
-import { REGISTER_GLOBAL_RATE, REGISTER_RATE } from "@/lib/hard-nos";
+import { MAX_TOKEN_LENGTH, REGISTER_GLOBAL_RATE, REGISTER_RATE } from "@/lib/hard-nos";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { clientIp, registerDomainError } from "@/lib/tenant";
 import { generatePublicKey, generateSiteToken, hashToken } from "@/lib/token";
@@ -69,4 +69,21 @@ export async function createSite(
   }
 
   redirect(`/dashboard/${token}?new=1`);
+}
+
+/**
+ * Dashboard switch for title/description experiments. Gated by the dashboard token, like the
+ * dashboard itself. The form sends the state it wants ("on" or "off").
+ */
+export async function setExperimentsEnabled(formData: FormData): Promise<void> {
+  const token = String(formData.get("token") ?? "");
+  const enabled = formData.get("enabled") === "on";
+  if (!token || token.length > MAX_TOKEN_LENGTH) notFound();
+
+  const rows = await db.select().from(sites).where(eq(sites.tokenHash, hashToken(token))).limit(1);
+  const site = rows[0];
+  if (!site || !site.isActive) notFound();
+
+  await db.update(sites).set({ experimentsEnabled: enabled }).where(eq(sites.id, site.id));
+  redirect(`/dashboard/${token}`);
 }
