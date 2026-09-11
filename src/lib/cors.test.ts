@@ -37,3 +37,11 @@ describe("corsHeaders", () => {
     expect(headers.get("Access-Control-Allow-Methods")).toMatch(/GET/);
   });
 });
+
+describe("corsHeaders for a credentialed cross-origin beacon", () => {
+  it("allows credentials, since navigator.sendBeacon posts with credentials mode include", () => {
+    const headers = new Headers(corsHeaders("https://cosineautonomous.com"));
+    expect(headers.get("Access-Control-Allow-Origin")).toBe("https://cosineautonomous.com");
+    expect(headers.get("Access-Control-Allow-Credentials")).toBe("true");
+  });
+});
