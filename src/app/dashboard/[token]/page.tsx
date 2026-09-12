@@ -14,6 +14,7 @@ import { storedCrawlFacts } from "@/lib/crawl/store";
 import { loadExperimentBoard } from "@/lib/experiment/store";
 import { AIO_DIMENSION_LABELS, AIO_DIMENSION_WEIGHTS } from "@/lib/rules/weights";
 import { pageScope } from "@/lib/tenant";
+import { terrainDashboardEnabled } from "@/lib/terrain/flag";
 import { hashToken } from "@/lib/token";
 
 export const dynamic = "force-dynamic";
@@ -117,9 +118,20 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
           <Link href="/" className="font-mono text-lg font-semibold tracking-tight">
             Signal
           </Link>
-          <span className="font-mono text-xs text-[var(--muted)]" data-testid="site-domain">
-            {site.domain}
-          </span>
+          <div className="flex items-center gap-5">
+            {terrainDashboardEnabled() ? (
+              <Link
+                href={`/dashboard/${token}/terrain`}
+                className="font-mono text-xs underline underline-offset-4"
+                data-testid="terrain-link"
+              >
+                Terrain
+              </Link>
+            ) : null}
+            <span className="font-mono text-xs text-[var(--muted)]" data-testid="site-domain">
+              {site.domain}
+            </span>
+          </div>
         </div>
       </header>
 

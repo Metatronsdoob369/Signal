@@ -43,6 +43,7 @@ export default defineConfig({
       DATABASE_URL: process.env.DATABASE_URL || "postgresql://signal:signal@localhost:5433/signal",
       APP_ORIGIN: baseURL,
       PORT: port,
+      TERRAIN_DASHBOARD: "1",
     },
   },
 });

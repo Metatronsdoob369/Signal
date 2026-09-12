@@ -22,6 +22,7 @@ export class DashboardPage {
   readonly exampleScoreOverall: Locator;
   readonly experimentsToggle: Locator;
   readonly experimentsState: Locator;
+  readonly terrainLink: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -45,6 +46,7 @@ export class DashboardPage {
     this.exampleScoreOverall = page.getByTestId("example-score-overall");
     this.experimentsToggle = page.getByTestId("experiments-toggle");
     this.experimentsState = page.getByTestId("experiments-state");
+    this.terrainLink = page.getByTestId("terrain-link");
   }
 
   async goto(token: string) {

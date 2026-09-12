@@ -1,0 +1,298 @@
+/* Terrain dashboard: one dark surface, glass HUD over it. Copper is the only accent; sage is line-work. */
+.terrain-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  color: #f3efe9;
+  background:
+    radial-gradient(120% 90% at 50% 115%, #1a1c21 0%, #0d0e11 55%, #08090b 100%);
+  font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.terrain-surface,
+.terrain-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.terrain-webgl {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.terrain-contour {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.terrain-contour-label {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 22px;
+  fill: rgba(243, 239, 233, 0.86);
+}
+
+/* Glass: tint from behind, blur with vibrancy, a thin specular rim, soft lift. */
+.terrain-glass {
+  position: absolute;
+  border-radius: 22px;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.045));
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 30px 70px -32px rgba(0, 0, 0, 0.85);
+  color: #f3efe9;
+}
+
+.terrain-title {
+  top: 28px;
+  left: 28px;
+  width: min(380px, calc(100vw - 56px));
+}
+
+.terrain-back {
+  top: 28px;
+  right: 28px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 12px;
+  text-decoration: none;
+  transition: background 160ms ease;
+}
+
+.terrain-back:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.07));
+}
+
+.terrain-back:focus-visible {
+  outline: 2px solid #c47a3a;
+  outline-offset: 2px;
+}
+
+.terrain-tiles {
+  left: 28px;
+  bottom: 28px;
+  min-width: min(520px, calc(100vw - 56px));
+}
+
+.terrain-fixes {
+  right: 28px;
+  bottom: 28px;
+  width: min(400px, calc(100vw - 56px));
+}
+
+.terrain-empty {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 56px));
+}
+
+.terrain-eyebrow {
+  margin: 0;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(243, 239, 233, 0.62);
+}
+
+.terrain-h1 {
+  margin: 8px 0 0;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.terrain-sub {
+  margin: 6px 0 0;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 12px;
+  color: rgba(243, 239, 233, 0.7);
+}
+
+.terrain-body {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(243, 239, 233, 0.86);
+}
+
+.terrain-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.terrain-legend-word {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  color: rgba(243, 239, 233, 0.7);
+}
+
+.terrain-ramp {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.terrain-law {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgba(243, 239, 233, 0.72);
+}
+
+.terrain-tiles-path {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
+.terrain-tile-row {
+  display: flex;
+  gap: 28px;
+  margin-top: 12px;
+}
+
+.terrain-tile {
+  min-width: 84px;
+}
+
+.terrain-number {
+  margin: 6px 0 0;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.terrain-zone {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  color: rgba(243, 239, 233, 0.78);
+}
+
+.terrain-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.terrain-mono {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+.terrain-muted {
+  color: rgba(243, 239, 233, 0.62);
+}
+
+.terrain-fix-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.terrain-fix {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.terrain-severity {
+  flex: none;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #f3efe9;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+/* Severity is temperature too: a critical finding is the coldest thing on the page. */
+.terrain-severity-critical {
+  background: rgba(44, 51, 64, 0.9);
+}
+
+.terrain-severity-warning {
+  background: rgba(107, 111, 120, 0.55);
+}
+
+.terrain-chip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  margin: -14px 0 0 14px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #f3efe9;
+  background: rgba(20, 22, 26, 0.55);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  will-change: transform;
+  transition: opacity 200ms ease;
+}
+
+@media (max-width: 720px) {
+  .terrain-title {
+    top: 16px;
+    left: 16px;
+  }
+  .terrain-back {
+    top: 16px;
+    right: 16px;
+  }
+  .terrain-tiles {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    min-width: 0;
+  }
+  .terrain-fixes {
+    display: none;
+  }
+  .terrain-tile-row {
+    gap: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terrain-back,
+  .terrain-chip {
+    transition: none;
+  }
+}
