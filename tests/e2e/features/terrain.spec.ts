@@ -77,5 +77,17 @@ test.describe("Terrain", () => {
 
     await terrain.back.click();
     await expect(dashboard.siteDomain).toHaveText(site.domain);
+
+    // Reduce Motion keeps the scene and stops the camera: the chip stays where the first frame put it.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await terrain.goto(site.token);
+    if ((await terrain.surface.getAttribute("data-mode")) === "scene") {
+      await expect(page.getByTestId("terrain-canvas").locator("canvas")).toBeVisible();
+      await expect(terrain.chips).toHaveCount(1);
+      const before = await terrain.chips.first().evaluate((el) => el.style.transform);
+      expect(before).toMatch(/^translate\(/);
+      await page.waitForTimeout(500);
+      await expect(terrain.chips.first()).toHaveJSProperty("style.transform", before);
+    }
   });
 });
