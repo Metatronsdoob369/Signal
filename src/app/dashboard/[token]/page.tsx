@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { setExperimentsEnabled } from "@/app/actions";
 import { AIO_DIMENSIONS, aioDimensionScoreSchema } from "@/contracts";
@@ -16,6 +16,13 @@ import { AIO_DIMENSION_LABELS, AIO_DIMENSION_WEIGHTS } from "@/lib/rules/weights
 import { pageScope } from "@/lib/tenant";
 import { terrainDashboardEnabled } from "@/lib/terrain/flag";
 import { hashToken } from "@/lib/token";
+import { MetricsTiles } from "@/components/dashboard/MetricsTiles";
+import {
+  METRIC_SPECS,
+  deriveCrawlAccessPercent,
+  deriveOpenFixesLatest,
+  deriveScoreOver7d,
+} from "@/lib/metrics/catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -100,6 +107,25 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
   const parsedDimensions = latestAudit ? dimensionsSchema.safeParse(latestAudit.aioDimensions) : null;
   const dimensions = parsedDimensions?.success ? parsedDimensions.data : null;
 
+  // Metric catalog derivations (pure) — site scope only. 7d windows for scores, latest delta for fixes,
+  // snapshot for crawl access. Visit/contact/speed tiles are scaffolded in code-only (not rendered)
+  // until telemetry lands.
+  const scoreAio = deriveScoreOver7d(recentAudits, site.domain, "aioScore", new Date());
+  const scoreSeo = deriveScoreOver7d(recentAudits, site.domain, "seoScore", new Date());
+  const siteAuditIds = scoped.site.slice(0, 2).map((a) => a.id);
+  const findingsRows =
+    siteAuditIds.length > 0
+      ? await db.select().from(findings).where(inArray(findings.auditId, siteAuditIds))
+      : [];
+  const findingsByAudit = new Map<string, typeof findingsRows>();
+  for (const row of findingsRows) {
+    const list = findingsByAudit.get(row.auditId) ?? [];
+    list.push(row);
+    findingsByAudit.set(row.auditId, list);
+  }
+  const openFixes = deriveOpenFixesLatest(scoped.site, findingsByAudit);
+  const crawlAccess = deriveCrawlAccessPercent(access);
+
   const origin = process.env.APP_ORIGIN || "http://localhost:3000";
   const embedCode = `<script defer src="${origin}/api/pack?key=${site.publicKey}"></script>`;
 
@@ -178,6 +204,16 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
             the embed script.
           </p>
         ) : null}
+
+        {/* Client-readable metric tiles — derived only from real data on this branch */}
+        <MetricsTiles
+          tiles={[
+            { id: "aio_score", spec: METRIC_SPECS.aio_score, data: scoreAio },
+            { id: "seo_score", spec: METRIC_SPECS.seo_score, data: scoreSeo },
+            { id: "open_fixes", spec: METRIC_SPECS.open_fixes, data: openFixes },
+            { id: "crawl_access", spec: METRIC_SPECS.crawl_access, data: crawlAccess },
+          ]}
+        />
 
         {exampleAudit ? (
           <section
