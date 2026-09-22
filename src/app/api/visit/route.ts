@@ -178,7 +178,8 @@ export async function POST(request: NextRequest) {
     const dayKey = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
     // Aggregate from visits for this page/day
-    const result = await db.execute(sql<{
+    const nextDay = new Date(dayKey.getTime() + 24 * 60 * 60 * 1000);
+    type AggRow = {
       visits: number;
       contacts: number;
       mailto: number;
@@ -188,7 +189,18 @@ export async function POST(request: NextRequest) {
       lcp_p75: number | null;
       inp_p75: number | null;
       cls_p75: string | null;
-    }>`
+    };
+    const result = await db.execute(sql<AggRow>`
+      visits: number;
+      contacts: number;
+      mailto: number;
+      tel: number;
+      form: number;
+      goal: number;
+      lcp_p75: number | null;
+      inp_p75: number | null;
+      cls_p75: string | null;
+    `
       SELECT
         COUNT(*)::int AS visits,
         COALESCE(SUM(contact_mailto + contact_tel + contact_form + contact_goal), 0)::int AS contacts,
@@ -196,27 +208,24 @@ export async function POST(request: NextRequest) {
         COALESCE(SUM(contact_tel), 0)::int AS tel,
         COALESCE(SUM(contact_form), 0)::int AS form,
         COALESCE(SUM(contact_goal), 0)::int AS goal,
-        (SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY lcp) FROM visits WHERE page_id = ${page.id} AND created_at >= ${dayKey} AND created_at < ${sql.raw(
-          "($1::timestamptz + interval '1 day')",
-        )}) AS lcp_p75,
-        (SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY inp) FROM visits WHERE page_id = ${page.id} AND created_at >= ${dayKey} AND created_at < ${sql.raw(
-          "($1::timestamptz + interval '1 day')",
-        )}) AS inp_p75,
-        (SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY cls) FROM visits WHERE page_id = ${page.id} AND created_at >= ${dayKey} AND created_at < ${sql.raw(
-          "($1::timestamptz + interval '1 day')",
-        )})::text AS cls_p75
+        (SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY lcp) FROM visits WHERE page_id = ${page.id} AND created_at >= ${dayKey} AND created_at < ${nextDay}) AS lcp_p75,
+        (SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY inp) FROM visits WHERE page_id = ${page.id} AND created_at >= ${dayKey} AND created_at < ${nextDay}) AS inp_p75,
+        (SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY cls) FROM visits WHERE page_id = ${page.id} AND created_at >= ${dayKey} AND created_at < ${nextDay})::text AS cls_p75
       FROM visits
       WHERE page_id = ${page.id}
         AND created_at >= ${dayKey}
-        AND created_at < ${sql.raw("($1::timestamptz + interval '1 day')")}
-    ` as any, [dayKey] as any);
+        AND created_at < ${nextDay}
+    `);
 
-    const agg = (result as unknown as { rows: any[] }).rows?.[0] ?? null;
+    const rows = (result as unknown as { rows: AggRow[] }).rows;
+    const agg = rows?.[0] ?? null;
 
     const rollupValues = {
       siteId: site.id,
       pageId: page.id,
-      day: dayKey as any,
+      day: `${dayKey.getUTCFullYear()}-${String(dayKey.getUTCMonth() + 1).padStart(2, "0")}-${String(
+        dayKey.getUTCDate(),
+      ).padStart(2, "0")}`,
       visits: Number(agg?.visits ?? 0),
       contacts: Number(agg?.contacts ?? 0),
       mailto: Number(agg?.mailto ?? 0),

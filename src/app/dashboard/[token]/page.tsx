@@ -25,6 +25,7 @@ import {
 } from "@/lib/metrics/catalog";
 import { visitRollups } from "@/db/schema";
 import { deriveVisitsOver7d, deriveContactActionsOver7d, deriveSpeedOver7d, type VisitRollupLike } from "@/lib/metrics/catalog";
+import type { MetricComputation, MetricTileSpec } from "@/lib/metrics/types";
 
 export const dynamic = "force-dynamic";
 
@@ -250,7 +251,7 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
 
         {/* Client-readable metric tiles — derived only from real data on this branch */}
         {(() => {
-          const tiles: { id: string; spec: any; data: any }[] = [];
+          const tiles: Array<{ id: string; spec: MetricTileSpec; data: MetricComputation }> = [];
           // Visits/contact/speed render only when there is data in the current window
           if ((visitsTile.sampleSize ?? 0) > 0) tiles.push({ id: "visits", spec: METRIC_SPECS.visits, data: visitsTile });
           if ((contactsTile.sampleSize ?? 0) > 0) tiles.push({ id: "contact_actions", spec: METRIC_SPECS.contact_actions, data: contactsTile });

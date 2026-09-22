@@ -197,10 +197,6 @@ export type VisitRollupLike = {
   clsP75?: number | null;
 };
 
-function isSameDay(a: Date, b: Date): boolean {
-  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate();
-}
-
 function seriesFromRollups(
   rollups: readonly VisitRollupLike[],
   fromInclusive: Date,
@@ -241,7 +237,6 @@ export function deriveVisitsOver7d(rollups: readonly VisitRollupLike[], now = ne
   const previousStart = addDays(currentStart, -7);
   const previousEnd = addDays(currentStart, -1);
   const currentSeries = seriesFromRollups(rollups, currentStart, today, (r) => r.visits);
-  const previousSeries = seriesFromRollups(rollups, previousStart, previousEnd, (r) => r.visits);
   const current = windowSum(rollups, currentStart, today, (r) => r.visits);
   const previous = windowSum(rollups, previousStart, previousEnd, (r) => r.visits);
   const delta = Number.isFinite(current) && Number.isFinite(previous) ? current - previous : null;
@@ -261,7 +256,6 @@ export function deriveContactActionsOver7d(rollups: readonly VisitRollupLike[], 
   const previousStart = addDays(currentStart, -7);
   const previousEnd = addDays(currentStart, -1);
   const currentSeries = seriesFromRollups(rollups, currentStart, today, (r) => r.contacts ?? 0);
-  const previousSeries = seriesFromRollups(rollups, previousStart, previousEnd, (r) => r.contacts ?? 0);
   const current = windowSum(rollups, currentStart, today, (r) => r.contacts ?? 0);
   const previous = windowSum(rollups, previousStart, previousEnd, (r) => r.contacts ?? 0);
   const delta = Number.isFinite(current) && Number.isFinite(previous) ? current - previous : null;
@@ -317,11 +311,11 @@ export function deriveSpeedOver7d(rollups: readonly VisitRollupLike[], now = new
   const currentSeries = seriesFromRollups(rollups, currentStart, today, (r) =>
     speedScore(r.lcpP75 ?? null, r.inpP75 ?? null, r.clsP75 ?? null),
   );
-  const previousSeries = seriesFromRollups(rollups, previousStart, previousEnd, (r) =>
+  const { avg: current } = windowAverage(currentSeries);
+  const previousWindowSeries = seriesFromRollups(rollups, previousStart, previousEnd, (r) =>
     speedScore(r.lcpP75 ?? null, r.inpP75 ?? null, r.clsP75 ?? null),
   );
-  const { avg: current, sampleSize } = windowAverage(currentSeries);
-  const { avg: previous } = windowAverage(previousSeries);
+  const { avg: previous } = windowAverage(previousWindowSeries);
   const delta = current !== null && previous !== null ? current - previous : null;
   // Sample size: visits in window (proxy for vitals sample)
   const visitsInWindow = windowSum(rollups, currentStart, today, (r) => r.visits);
