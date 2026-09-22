@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { RetrievalAccessSummary } from "@/lib/crawl/facts";
 import { deriveCrawlAccessPercent, deriveOpenFixesLatest, deriveScoreOver7d, type AuditLike } from "./catalog";
 
 function audit(url: string, dayOffset: number, scores: Partial<Pick<AuditLike, "seoScore" | "aioScore">>): AuditLike {
@@ -70,7 +71,12 @@ describe("deriveOpenFixesLatest", () => {
 
 describe("deriveCrawlAccessPercent", () => {
   it("computes allowed/total percentage when facts exist", () => {
-    const access = { total: 5, allowed: 3, blocked: [] as any[], trainersBlocked: [] as any[] };
+    const access: RetrievalAccessSummary = {
+      total: 5,
+      allowed: 3,
+      blocked: [],
+      trainersBlocked: [],
+    };
     const result = deriveCrawlAccessPercent(access);
     expect(result.current).toBeCloseTo(60, 5);
     expect(result.sampleSize).toBe(5);
@@ -78,7 +84,7 @@ describe("deriveCrawlAccessPercent", () => {
   });
 
   it("returns unknown when facts are missing", () => {
-    const result = deriveCrawlAccessPercent(null as any);
+    const result = deriveCrawlAccessPercent(null);
     expect(result.current).toBeNull();
     expect(result.sampleSize).toBe(0);
   });
