@@ -23,6 +23,8 @@ import {
   deriveOpenFixesLatest,
   deriveScoreOver7d,
 } from "@/lib/metrics/catalog";
+import { visitRollups } from "@/db/schema";
+import { deriveVisitsOver7d, deriveContactActionsOver7d, deriveSpeedOver7d, type VisitRollupLike } from "@/lib/metrics/catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +131,47 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
   const origin = process.env.APP_ORIGIN || "http://localhost:3000";
   const embedCode = `<script defer src="${origin}/api/pack?key=${site.publicKey}"></script>`;
 
+  // Visits/contact/speed — read daily rollups for the last 14 days and derive 7d tiles
+  const today = new Date();
+  const start14 = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 13));
+  const rollupRows = await db
+    .select()
+    .from(visitRollups)
+    .where(eq(visitRollups.siteId, site.id))
+    .orderBy(visitRollups.day);
+  // Aggregate by day across pages
+  const byDay = new Map<string, { visits: number; contacts: number; lcpSum: number; inpSum: number; clsSum: number; weight: number }>();
+  for (const r of rollupRows) {
+    const dayIso = r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day);
+    // only last 14 days
+    const dayDate = new Date(dayIso + "T00:00:00Z");
+    if (dayDate < start14) continue;
+    const rec = byDay.get(dayIso) ?? { visits: 0, contacts: 0, lcpSum: 0, inpSum: 0, clsSum: 0, weight: 0 };
+    rec.visits += r.visits ?? 0;
+    rec.contacts += r.contacts ?? 0;
+    const w = r.visits ?? 0;
+    if (w > 0) {
+      if (r.lcpP75 != null) rec.lcpSum += Number(r.lcpP75) * w;
+      if (r.inpP75 != null) rec.inpSum += Number(r.inpP75) * w;
+      if (r.clsP75 != null) rec.clsSum += Number(r.clsP75) * w;
+      rec.weight += w;
+    }
+    byDay.set(dayIso, rec);
+  }
+  const visitRolls: VisitRollupLike[] = Array.from(byDay.entries())
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([day, v]) => ({
+      day,
+      visits: v.visits,
+      contacts: v.contacts,
+      lcpP75: v.weight > 0 ? Math.round(v.lcpSum / v.weight) : null,
+      inpP75: v.weight > 0 ? Math.round(v.inpSum / v.weight) : null,
+      clsP75: v.weight > 0 ? Math.round((v.clsSum / v.weight) * 1000) / 1000 : null,
+    }));
+  const visitsTile = deriveVisitsOver7d(visitRolls, today);
+  const contactsTile = deriveContactActionsOver7d(visitRolls, today);
+  const speedTile = deriveSpeedOver7d(visitRolls, today);
+
   const headline = latestAudit
     ? {
         seo: Number(latestAudit.seoScore),
@@ -206,14 +249,21 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
         ) : null}
 
         {/* Client-readable metric tiles — derived only from real data on this branch */}
-        <MetricsTiles
-          tiles={[
+        {(() => {
+          const tiles: { id: string; spec: any; data: any }[] = [];
+          // Visits/contact/speed render only when there is data in the current window
+          if ((visitsTile.sampleSize ?? 0) > 0) tiles.push({ id: "visits", spec: METRIC_SPECS.visits, data: visitsTile });
+          if ((contactsTile.sampleSize ?? 0) > 0) tiles.push({ id: "contact_actions", spec: METRIC_SPECS.contact_actions, data: contactsTile });
+          if (speedTile.current != null && (speedTile.sampleSize ?? 0) > 0) tiles.push({ id: "speed", spec: METRIC_SPECS.speed, data: speedTile });
+          // Always include existing working tiles
+          tiles.push(
             { id: "aio_score", spec: METRIC_SPECS.aio_score, data: scoreAio },
             { id: "seo_score", spec: METRIC_SPECS.seo_score, data: scoreSeo },
             { id: "open_fixes", spec: METRIC_SPECS.open_fixes, data: openFixes },
             { id: "crawl_access", spec: METRIC_SPECS.crawl_access, data: crawlAccess },
-          ]}
-        />
+          );
+          return <MetricsTiles tiles={tiles} />;
+        })()}
 
         {exampleAudit ? (
           <section

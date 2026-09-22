@@ -185,3 +185,153 @@ export function deriveCrawlAccessPercent(access: RetrievalAccess): MetricComputa
   };
 }
 
+// ---------- Phase 1: visit/contact/speed derives from daily rollups ----------
+
+export type VisitRollupLike = {
+  /** ISO date YYYY-MM-DD */
+  day: string;
+  visits: number;
+  contacts?: number;
+  lcpP75?: number | null;
+  inpP75?: number | null;
+  clsP75?: number | null;
+};
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate();
+}
+
+function seriesFromRollups(
+  rollups: readonly VisitRollupLike[],
+  fromInclusive: Date,
+  toInclusive: Date,
+  pick: (r: VisitRollupLike) => number | null | undefined,
+): SeriesPoint[] {
+  const map = new Map<string, number | null | undefined>();
+  for (const r of rollups) map.set(r.day, pick(r));
+  const series: SeriesPoint[] = [];
+  let d = startOfUtcDay(fromInclusive);
+  const end = startOfUtcDay(toInclusive);
+  while (d <= end) {
+    const key = formatIsoDate(d);
+    const v = map.get(key);
+    series.push({
+      date: key,
+      value: v == null ? NaN : Number(v),
+      sampleSize: 0,
+    });
+    d = addDays(d, 1);
+  }
+  return series;
+}
+
+function windowSum(rollups: readonly VisitRollupLike[], fromInclusive: Date, toInclusive: Date, pick: (r: VisitRollupLike) => number): number {
+  let total = 0;
+  for (const r of rollups) {
+    const d = new Date(r.day + "T00:00:00Z");
+    if (d < startOfUtcDay(fromInclusive) || d > startOfUtcDay(toInclusive)) continue;
+    total += pick(r);
+  }
+  return total;
+}
+
+export function deriveVisitsOver7d(rollups: readonly VisitRollupLike[], now = new Date()): MetricComputation {
+  const today = startOfUtcDay(now);
+  const currentStart = addDays(today, -6);
+  const previousStart = addDays(currentStart, -7);
+  const previousEnd = addDays(currentStart, -1);
+  const currentSeries = seriesFromRollups(rollups, currentStart, today, (r) => r.visits);
+  const previousSeries = seriesFromRollups(rollups, previousStart, previousEnd, (r) => r.visits);
+  const current = windowSum(rollups, currentStart, today, (r) => r.visits);
+  const previous = windowSum(rollups, previousStart, previousEnd, (r) => r.visits);
+  const delta = Number.isFinite(current) && Number.isFinite(previous) ? current - previous : null;
+  return {
+    current,
+    previous,
+    delta,
+    sampleSize: current,
+    windowLabel: "last 7 days",
+    series: currentSeries,
+  };
+}
+
+export function deriveContactActionsOver7d(rollups: readonly VisitRollupLike[], now = new Date()): MetricComputation {
+  const today = startOfUtcDay(now);
+  const currentStart = addDays(today, -6);
+  const previousStart = addDays(currentStart, -7);
+  const previousEnd = addDays(currentStart, -1);
+  const currentSeries = seriesFromRollups(rollups, currentStart, today, (r) => r.contacts ?? 0);
+  const previousSeries = seriesFromRollups(rollups, previousStart, previousEnd, (r) => r.contacts ?? 0);
+  const current = windowSum(rollups, currentStart, today, (r) => r.contacts ?? 0);
+  const previous = windowSum(rollups, previousStart, previousEnd, (r) => r.contacts ?? 0);
+  const delta = Number.isFinite(current) && Number.isFinite(previous) ? current - previous : null;
+  return {
+    current,
+    previous,
+    delta,
+    sampleSize: current,
+    windowLabel: "last 7 days",
+    series: currentSeries,
+  };
+}
+
+// Core Web Vitals thresholds (good/poor) used for piecewise-linear scoring
+const LCP_GOOD = 2500;
+const LCP_POOR = 4000;
+const INP_GOOD = 200;
+const INP_POOR = 500;
+const CLS_GOOD = 0.1;
+const CLS_POOR = 0.25;
+
+function scoreFromThresholds(value: number | null | undefined, good: number, poor: number, lowerIsBetter: boolean): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const v = Number(value);
+  if (lowerIsBetter) {
+    if (v <= good) return 100;
+    if (v >= poor) return 0;
+    return Math.max(0, Math.min(100, Math.round(((poor - v) / (poor - good)) * 100)));
+  } else {
+    if (v >= good) return 100;
+    if (v <= poor) return 0;
+    return Math.max(0, Math.min(100, Math.round(((v - poor) / (good - poor)) * 100)));
+  }
+}
+
+function speedScore(lcpMs: number | null | undefined, inpMs: number | null | undefined, cls: number | null | undefined): number | null {
+  // Piecewise-linear scores: lower is better for all three; equal weights.
+  const lcpScore = scoreFromThresholds(lcpMs, LCP_GOOD, LCP_POOR, true);
+  const inpScore = scoreFromThresholds(inpMs, INP_GOOD, INP_POOR, true);
+  const clsScore = scoreFromThresholds(cls, CLS_GOOD, CLS_POOR, true);
+  const parts = [lcpScore, inpScore, clsScore].filter((v): v is number => v != null);
+  if (parts.length === 0) return null;
+  return Math.round(parts.reduce((s, v) => s + v, 0) / parts.length);
+}
+
+export function deriveSpeedOver7d(rollups: readonly VisitRollupLike[], now = new Date()): MetricComputation {
+  const today = startOfUtcDay(now);
+  const currentStart = addDays(today, -6);
+  const previousStart = addDays(currentStart, -7);
+  const previousEnd = addDays(currentStart, -1);
+
+  // Daily speed score series from daily p75 vitals
+  const currentSeries = seriesFromRollups(rollups, currentStart, today, (r) =>
+    speedScore(r.lcpP75 ?? null, r.inpP75 ?? null, r.clsP75 ?? null),
+  );
+  const previousSeries = seriesFromRollups(rollups, previousStart, previousEnd, (r) =>
+    speedScore(r.lcpP75 ?? null, r.inpP75 ?? null, r.clsP75 ?? null),
+  );
+  const { avg: current, sampleSize } = windowAverage(currentSeries);
+  const { avg: previous } = windowAverage(previousSeries);
+  const delta = current !== null && previous !== null ? current - previous : null;
+  // Sample size: visits in window (proxy for vitals sample)
+  const visitsInWindow = windowSum(rollups, currentStart, today, (r) => r.visits);
+  return {
+    current,
+    previous,
+    delta,
+    sampleSize: visitsInWindow,
+    windowLabel: "last 7 days",
+    series: currentSeries,
+  };
+}
+
