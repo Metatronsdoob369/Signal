@@ -5,6 +5,7 @@ import {
   numeric,
   pgTable,
   text,
+  date,
   timestamp,
   unique,
   uuid,
@@ -112,3 +113,65 @@ export const experimentEvents = pgTable("experiment_events", {
   value: numeric("value", { precision: 12, scale: 4 }).default("0").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Visitor telemetry — Phase 1
+export const visits = pgTable(
+  "visits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .references(() => sites.id)
+      .notNull(),
+    pageId: uuid("page_id")
+      .references(() => pages.id)
+      .notNull(),
+    /** Client-generated visit identifier to stitch unload updates (not a cookie, per-visit only). */
+    clientVisitId: text("client_visit_id").notNull(),
+    path: text("path").notNull(),
+    /** Reduced client-side to a hostname without www; empty string means direct. */
+    referrerHost: text("referrer_host").default("").notNull(),
+    /** Classified server-side from referrerHost: ai|search|social|direct|other. */
+    referrerClass: text("referrer_class").default("other").notNull(),
+    /** mobile|tablet|desktop */
+    deviceClass: text("device_class").default("desktop").notNull(),
+    /** Web Vitals in milliseconds; cls is unitless. All optional. */
+    lcp: integer("lcp"),
+    inp: integer("inp"),
+    cls: numeric("cls", { precision: 6, scale: 3 }),
+    /** 0..1 engagement score sent on unload; null if not observed. */
+    engagement: numeric("engagement", { precision: 6, scale: 3 }),
+    contactMailto: integer("contact_mailto").default(0).notNull(),
+    contactTel: integer("contact_tel").default(0).notNull(),
+    contactForm: integer("contact_form").default(0).notNull(),
+    contactGoal: integer("contact_goal").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique("visits_site_visit_unique").on(table.siteId, table.clientVisitId)],
+);
+
+export const visitRollups = pgTable(
+  "visit_rollups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .references(() => sites.id)
+      .notNull(),
+    pageId: uuid("page_id")
+      .references(() => pages.id)
+      .notNull(),
+    /** UTC day bucket for the page. */
+    day: date("day").notNull(),
+    visits: integer("visits").default(0).notNull(),
+    contacts: integer("contacts").default(0).notNull(),
+    mailto: integer("mailto").default(0).notNull(),
+    tel: integer("tel").default(0).notNull(),
+    form: integer("form").default(0).notNull(),
+    goal: integer("goal").default(0).notNull(),
+    /** p75 vitals for the day (milliseconds for lcp/inp, unitless for cls). */
+    lcpP75: integer("lcp_p75"),
+    inpP75: integer("inp_p75"),
+    clsP75: numeric("cls_p75", { precision: 6, scale: 3 }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique("visit_rollups_page_day_unique").on(table.pageId, table.day)],
+);

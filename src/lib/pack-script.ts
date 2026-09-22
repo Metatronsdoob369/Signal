@@ -1,4 +1,4 @@
-export const PACK_VERSION = "0.2.1";
+export const PACK_VERSION = "0.3.0";
 
 /** Byte budget for the served pack. Collectors that push past this need a reason. */
 export const PACK_MAX_BYTES = 24_576;
@@ -78,6 +78,22 @@ export function buildPackScript(opts: { key: string; origin: string }): string {
   var clsSupported = false;
   var inp = 0;
   var inpSupported = false;
+  var visitId = (function () {
+    try {
+      var arr = new Uint8Array(8);
+      if (window.crypto && crypto.getRandomValues) {
+        crypto.getRandomValues(arr);
+      } else {
+        for (var i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
+      }
+      var s = "";
+      for (var j = 0; j < arr.length; j++) s += arr[j].toString(16).padStart(2, "0");
+      return s;
+    } catch (e) {
+      return String(Date.now()) + Math.random().toString(36).slice(2, 8);
+    }
+  })();
+  var contacts = { mailto: 0, tel: 0, form: 0, goal: 0 };
 
   try {
     new PerformanceObserver(function (list) {
@@ -433,6 +449,31 @@ export function buildPackScript(opts: { key: string; origin: string }): string {
     }).catch(function () {});
   }
 
+  function deviceClass() {
+    var w = Math.max(document.documentElement ? document.documentElement.clientWidth : 0, window.innerWidth || 0);
+    if (w <= 768) return "mobile";
+    if (w <= 1024) return "tablet";
+    return "desktop";
+  }
+
+  function sendVisit(payload) {
+    var endpoint = API_ORIGIN + "/api/visit?key=" + encodeURIComponent(KEY);
+    var body = JSON.stringify(payload);
+    if (navigator.sendBeacon) {
+      try {
+        var blob = new Blob([body], { type: "application/json" });
+        if (navigator.sendBeacon(endpoint, blob)) return;
+      } catch (e) {}
+    }
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body,
+      keepalive: true,
+      mode: "cors"
+    }).catch(function () {});
+  }
+
   var variantId = null;
   var startedAt = Date.now();
   var maxScroll = 0;
@@ -464,12 +505,68 @@ export function buildPackScript(opts: { key: string; origin: string }): string {
     return Math.round((Math.min(1, maxScroll / 100) * 0.6 + Math.min(1, dwell / 45) * 0.4) * 100) / 100;
   }
 
+  // Contact action listeners
+  window.addEventListener("click", function (e) {
+    try {
+      var t = e.target;
+      while (t && t !== document.body) {
+        if (t.matches && t.matches('[data-signal-goal]')) { contacts.goal++; break; }
+        if (t.matches && t.matches('a[href^=\"mailto:\"]')) { contacts.mailto++; break; }
+        if (t.matches && t.matches('a[href^=\"tel:\"]')) { contacts.tel++; break; }
+        t = t.parentElement;
+      }
+    } catch (err) {}
+  }, { passive: true, capture: true });
+  window.addEventListener("submit", function (e) {
+    try {
+      var f = e.target;
+      if (f && f.tagName === "FORM") contacts.form++;
+    } catch (err) {}
+  }, true);
+
   function run() {
     try {
       send(collect());
     } catch (e) {
       if (window.__signalDebug) console.error("[Signal]", e);
     }
+  }
+
+  function sendVisitInitial() {
+    try {
+      var refHost = hostOf(document.referrer || "");
+      var payload = {
+        id: visitId,
+        path: location.pathname,
+        referrer: refHost,
+        device: deviceClass(),
+        vitals: {
+          lcp: lcp > 0 ? Math.round(lcp) : undefined,
+          inp: inp > 0 ? Math.round(inp) : undefined,
+          cls: clsSupported ? Math.round(cls * 1000) / 1000 : undefined
+        }
+      };
+      sendVisit(payload);
+    } catch (e) {}
+  }
+
+  function sendVisitFinal() {
+    try {
+      var payload = {
+        id: visitId,
+        path: location.pathname,
+        referrer: hostOf(document.referrer || ""),
+        device: deviceClass(),
+        vitals: {
+          lcp: lcp > 0 ? Math.round(lcp) : undefined,
+          inp: inp > 0 ? Math.round(inp) : undefined,
+          cls: clsSupported ? Math.round(cls * 1000) / 1000 : undefined
+        },
+        engagement: engagementScore(),
+        contacts: contacts
+      };
+      sendVisit(payload);
+    } catch (e) {}
   }
 
   function sendExperiment() {
@@ -487,6 +584,7 @@ export function buildPackScript(opts: { key: string; origin: string }): string {
         { type: "vital", metric: "cls", value: Math.round(cls * 1000) / 1000 }
       ]
     });
+    sendVisitFinal();
   }
 
   var auditStarted = false;
@@ -504,6 +602,8 @@ export function buildPackScript(opts: { key: string; origin: string }): string {
       .then(function (v) { applyVariant(v); })
       .catch(function () {})
       .then(function () { run(); });
+    // Initial visit beacon (small)
+    sendVisitInitial();
   }
 
   window.addEventListener("pagehide", sendExperiment);
