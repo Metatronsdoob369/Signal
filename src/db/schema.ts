@@ -19,6 +19,8 @@ export const sites = pgTable("sites", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   lastAuditAt: timestamp("last_audit_at", { withTimezone: true }),
   isActive: boolean("is_active").default(true).notNull(),
+  /** Per-site switch for title/description experiments. Off by default: variants rewrite the client page's title. */
+  experimentsEnabled: boolean("experiments_enabled").default(false).notNull(),
   seoScore: numeric("seo_score", { precision: 5, scale: 2 }),
   aioScore: numeric("aio_score", { precision: 5, scale: 2 }),
   overallScore: numeric("overall_score", { precision: 5, scale: 2 }),

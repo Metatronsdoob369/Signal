@@ -8,11 +8,10 @@ export class ExampleClientPage {
   }
 
   async goto(key: string) {
+    // Resolve answers 404 when a site has experiments off (the default); the audit still runs.
     const resolve = this.page.waitForResponse(
       (response) =>
-        response.url().includes("/api/resolve") &&
-        response.request().method() === "GET" &&
-        response.ok(),
+        response.url().includes("/api/resolve") && response.request().method() === "GET",
     );
     const beacon = this.page.waitForResponse((response) => this.isAuditBeacon(response));
     await this.page.goto(`/example-client-page.html?key=${encodeURIComponent(key)}`);

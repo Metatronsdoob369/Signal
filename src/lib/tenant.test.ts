@@ -8,6 +8,7 @@ import {
   registerDomainError,
   siteMayServe,
   trustedProxyHops,
+  pageScope,
 } from "@/lib/tenant";
 
 describe("isValidHostname", () => {
@@ -153,5 +154,23 @@ describe("trustedProxyHops", () => {
     expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: "3" })).toBe(3);
     expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: "-1" })).toBe(0);
     expect(trustedProxyHops({ TRUSTED_PROXY_HOPS: "many" })).toBe(0);
+  });
+});
+
+describe("pageScope", () => {
+  it("puts pages on the registered domain, including www and subdomains, in site scope", () => {
+    expect(pageScope("https://cosineautonomous.com/", "cosineautonomous.com")).toBe("site");
+    expect(pageScope("https://www.cosineautonomous.com/about", "cosineautonomous.com")).toBe("site");
+    expect(pageScope("https://docs.cosineautonomous.com/", "cosineautonomous.com")).toBe("site");
+  });
+
+  it("puts Signal's own example page in app scope", () => {
+    expect(pageScope("http://localhost:3010/example-client-page.html?key=abc", "cosineautonomous.com")).toBe("app");
+    expect(pageScope("https://signal.example.net/example-client-page.html", "cosineautonomous.com")).toBe("app");
+  });
+
+  it("returns null for a URL it cannot parse", () => {
+    expect(pageScope("not a url", "cosineautonomous.com")).toBeNull();
+    expect(pageScope("", "cosineautonomous.com")).toBeNull();
   });
 });
