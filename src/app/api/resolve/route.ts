@@ -4,10 +4,11 @@ import { resolveQuerySchema } from "@/contracts";
 import { db } from "@/db";
 import { sites } from "@/db/schema";
 import { allowedBeaconOrigin, corsHeaders } from "@/lib/cors";
+import { experimentsAllowed } from "@/lib/experiment/gate";
 import { resolveVariant } from "@/lib/experiment/store";
 import { BEACON_RATE } from "@/lib/hard-nos";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { requestIp, siteMayServe } from "@/lib/tenant";
+import { pageScope, requestIp, siteMayServe } from "@/lib/tenant";
 import { hashToken } from "@/lib/token";
 
 const RESOLVE_METHODS = "GET, OPTIONS";
@@ -63,6 +64,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Origin not allowed" }, { status: 403 });
   }
   const headers = allowOrigin ? corsHeaders(allowOrigin, RESOLVE_METHODS) : undefined;
+
+  // Variants go only to pages on the registered domain of a site that switched experiments on.
+  // A cross-origin client page always sends Origin; a request without one is Signal's own example
+  // page. Gating here, before resolveVariant, also stops the example path from seeding page and
+  // variant rows under a real site.
+  const pageOrigin = originHeader && originHeader !== "null" ? originHeader : null;
+  const scope = pageOrigin ? pageScope(pageOrigin, site.domain) : "app";
+  if (!experimentsAllowed(site, scope)) {
+    return NextResponse.json({ error: "No variant" }, { status: 404, headers });
+  }
 
   try {
     const resolved = await resolveVariant(site.id, parsed.data.path, parsed.data.t, parsed.data.d);

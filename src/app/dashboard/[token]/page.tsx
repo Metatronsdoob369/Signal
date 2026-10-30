@@ -3,14 +3,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { setExperimentsEnabled } from "@/app/actions";
 import { AIO_DIMENSIONS, aioDimensionScoreSchema } from "@/contracts";
 import { db } from "@/db";
 import { audits, findings, sites } from "@/db/schema";
+import { splitAuditsByScope } from "@/lib/audit-scope";
 import { BOTS_AS_OF, KNOWN_BOTS } from "@/lib/crawl/bots";
 import { retrievalAccessSummary } from "@/lib/crawl/facts";
 import { storedCrawlFacts } from "@/lib/crawl/store";
 import { loadExperimentBoard } from "@/lib/experiment/store";
 import { AIO_DIMENSION_LABELS, AIO_DIMENSION_WEIGHTS } from "@/lib/rules/weights";
+import { pageScope } from "@/lib/tenant";
 import { hashToken } from "@/lib/token";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +32,20 @@ function scoreColor(score: number): string {
   if (score >= 80) return "text-emerald-700";
   if (score >= 60) return "text-amber-700";
   return "text-red-700";
+}
+
+function ScoreTile({ label, value, testId }: { label: string; value: number | null; testId: string }) {
+  return (
+    <div>
+      <p className="font-mono text-xs text-[var(--muted)]">{label}</p>
+      <p
+        className={`font-mono text-3xl font-semibold ${value === null ? "text-[var(--muted)]" : scoreColor(value)}`}
+        data-testid={testId}
+      >
+        {value === null ? "—" : value}
+      </p>
+    </div>
+  );
 }
 
 const ROLE_LABEL = { fetcher: "Answer-time fetch", search: "AI search index", trainer: "Training crawl" } as const;
@@ -50,14 +67,19 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
   if (siteRows.length === 0 || !siteRows[0].isActive) notFound();
   const site = siteRows[0];
 
+  // Newest first. Site-scope audits (pages on the registered domain) carry the headline, the
+  // breakdown, and the findings. App-scope audits (Signal's own example page opened with this
+  // site's key) show as a demo only and never count toward the site.
   const recentAudits = await db
     .select()
     .from(audits)
     .where(eq(audits.siteId, site.id))
     .orderBy(desc(audits.createdAt))
-    .limit(20);
+    .limit(50);
+  const scoped = splitAuditsByScope(recentAudits, site.domain);
+  const latestAudit = scoped.latestSite;
+  const exampleAudit = scoped.latestApp;
 
-  const latestAudit = recentAudits[0];
   const latestFindings = latestAudit
     ? await db
         .select()
@@ -66,6 +88,9 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
         .orderBy(desc(findings.createdAt))
         .limit(50)
     : [];
+  const exampleFindingCount = exampleAudit
+    ? (await db.select({ id: findings.id }).from(findings).where(eq(findings.auditId, exampleAudit.id))).length
+    : 0;
 
   const experimentBoard = await loadExperimentBoard(site.id);
 
@@ -77,9 +102,13 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
   const origin = process.env.APP_ORIGIN || "http://localhost:3000";
   const embedCode = `<script defer src="${origin}/api/pack?key=${site.publicKey}"></script>`;
 
-  const seo = Number(site.seoScore ?? latestAudit?.seoScore ?? 0);
-  const aio = Number(site.aioScore ?? latestAudit?.aioScore ?? 0);
-  const overall = Number(site.overallScore ?? latestAudit?.overallScore ?? 0);
+  const headline = latestAudit
+    ? {
+        seo: Number(latestAudit.seoScore),
+        aio: Number(latestAudit.aioScore),
+        overall: Number(latestAudit.overallScore),
+      }
+    : null;
 
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
@@ -125,35 +154,44 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
             </p>
           </div>
           <div className="flex gap-8" data-testid="scores">
-            <div>
-              <p className="font-mono text-xs text-[var(--muted)]">Overall</p>
-              <p
-                className={`font-mono text-3xl font-semibold ${scoreColor(overall)}`}
-                data-testid="score-overall"
-              >
-                {overall}
-              </p>
-            </div>
-            <div>
-              <p className="font-mono text-xs text-[var(--muted)]">SEO</p>
-              <p
-                className={`font-mono text-3xl font-semibold ${scoreColor(seo)}`}
-                data-testid="score-seo"
-              >
-                {seo}
-              </p>
-            </div>
-            <div>
-              <p className="font-mono text-xs text-[var(--muted)]">AIO</p>
-              <p
-                className={`font-mono text-3xl font-semibold ${scoreColor(aio)}`}
-                data-testid="score-aio"
-              >
-                {aio}
-              </p>
-            </div>
+            <ScoreTile label="Overall" value={headline?.overall ?? null} testId="score-overall" />
+            <ScoreTile label="SEO" value={headline?.seo ?? null} testId="score-seo" />
+            <ScoreTile label="AIO" value={headline?.aio ?? null} testId="score-aio" />
           </div>
         </div>
+
+        {!headline ? (
+          <p className="mt-4 text-sm text-[var(--muted)]" data-testid="headline-empty">
+            No audit from {site.domain} yet. Scores appear after the first load of a page on this domain with
+            the embed script.
+          </p>
+        ) : null}
+
+        {exampleAudit ? (
+          <section
+            className="mt-8 border border-dashed border-[var(--line)] bg-white p-5"
+            data-testid="example-audit"
+          >
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="font-mono text-sm font-medium">Example page audit</h2>
+                <p className="mt-1 max-w-xl text-sm text-[var(--muted)]">
+                  Signal&apos;s example client page was opened with this site&apos;s embed key. It proves the
+                  pipe works and never counts toward {site.domain}: it stays out of the scores above, the
+                  breakdown, the findings, and the experiments.
+                </p>
+                <p className="mt-2 font-mono text-xs text-[var(--muted)]">
+                  {exampleAudit.createdAt.toISOString()} · {exampleFindingCount} findings
+                </p>
+              </div>
+              <div className="flex gap-8">
+                <ScoreTile label="Overall" value={Number(exampleAudit.overallScore)} testId="example-score-overall" />
+                <ScoreTile label="SEO" value={Number(exampleAudit.seoScore)} testId="example-score-seo" />
+                <ScoreTile label="AIO" value={Number(exampleAudit.aioScore)} testId="example-score-aio" />
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-10 border border-[var(--line)] bg-white p-5" data-testid="embed">
           <h2 className="font-mono text-sm font-medium">Embed</h2>
@@ -169,15 +207,16 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
             >
               the example client page
             </a>{" "}
-            with this site&apos;s embed key.
+            with this site&apos;s embed key. It is a demo: its audit shows separately and never counts toward
+            this site.
           </p>
         </section>
 
         <section className="mt-10" data-testid="aio-breakdown">
           <h2 className="font-mono text-sm font-medium">AI readiness breakdown</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Five deterministic dimensions from the latest audit. Weights are v0.2 priors; a dimension reads
-            &ldquo;unknown&rdquo; when Signal has no evidence for it yet.
+            Five deterministic dimensions from the latest audit of a page on this domain. Weights are v0.2
+            priors; a dimension reads &ldquo;unknown&rdquo; when Signal has no evidence for it yet.
           </p>
           {dimensions ? (
             <div className="mt-4 overflow-x-auto border border-[var(--line)] bg-white">
@@ -214,7 +253,7 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
             </div>
           ) : (
             <p className="mt-3 text-sm text-[var(--muted)]" data-testid="aio-breakdown-empty">
-              No v0.2 audit yet. Load a page with the embed script.
+              No v0.2 audit of this domain yet. Load a page on it with the embed script.
             </p>
           )}
         </section>
@@ -281,10 +320,33 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
         </section>
 
         <section className="mt-10" data-testid="experiments">
-          <h2 className="font-mono text-sm font-medium">Experiments</h2>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="font-mono text-sm font-medium">Experiments</h2>
+              <p className="mt-1 font-mono text-xs text-[var(--muted)]" data-testid="experiments-state">
+                {site.experimentsEnabled
+                  ? "Experiments: on. Visitors to pages on this domain may receive a title or description variant."
+                  : "Experiments: off. Visitors see each page's own title and description."}
+              </p>
+            </div>
+            <form action={setExperimentsEnabled}>
+              <input type="hidden" name="token" value={token} />
+              <input type="hidden" name="enabled" value={site.experimentsEnabled ? "off" : "on"} />
+              <button
+                type="submit"
+                data-testid="experiments-toggle"
+                className="border border-[var(--ink)] px-4 py-2 font-mono text-xs font-medium transition hover:bg-[var(--ink)] hover:text-[var(--paper)]"
+              >
+                {site.experimentsEnabled ? "Turn experiments off" : "Turn experiments on"}
+              </button>
+            </form>
+          </div>
           {experimentBoard.length === 0 ? (
             <p className="mt-3 text-sm text-[var(--muted)]" data-testid="experiments-empty">
-              No title or description variants yet. Load a page with the embed script.
+              No title or description variants yet.{" "}
+              {site.experimentsEnabled
+                ? "Load a page on this domain with the embed script."
+                : "Turn experiments on, then load a page on this domain with the embed script."}
             </p>
           ) : (
             <div className="mt-4 space-y-6" data-testid="experiments-board">
@@ -336,7 +398,7 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
           <h2 className="font-mono text-sm font-medium">Latest findings</h2>
           {latestFindings.length === 0 ? (
             <p className="mt-3 text-sm text-[var(--muted)]" data-testid="findings-empty">
-              No audits yet. Load a page with the embed script.
+              No audit of this domain yet. Load a page on it with the embed script.
             </p>
           ) : (
             <ul
@@ -381,6 +443,7 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
                 <thead className="border-b border-[var(--line)] text-[var(--muted)]">
                   <tr>
                     <th className="px-4 py-3 font-medium">When</th>
+                    <th className="px-4 py-3 font-medium">Page</th>
                     <th className="px-4 py-3 font-medium">URL</th>
                     <th className="px-4 py-3 font-medium">SEO</th>
                     <th className="px-4 py-3 font-medium">AIO</th>
@@ -392,6 +455,9 @@ export default async function DashboardPage({ params, searchParams }: PageProps)
                     <tr key={audit.id} className="border-b border-[var(--line)] last:border-0">
                       <td className="px-4 py-3 whitespace-nowrap">
                         {audit.createdAt.toISOString()}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-[var(--muted)]">
+                        {pageScope(audit.url, site.domain) === "site" ? "site" : "example page"}
                       </td>
                       <td className="px-4 py-3 max-w-md truncate">{audit.url}</td>
                       <td className="px-4 py-3">{Number(audit.seoScore)}</td>

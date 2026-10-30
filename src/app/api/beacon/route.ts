@@ -7,9 +7,10 @@ import { scheduleCrawlRefresh, storedCrawlFacts } from "@/lib/crawl/store";
 import { BEACON_RATE, MAX_BEACON_BYTES } from "@/lib/hard-nos";
 import { parseBeaconPayload, readJsonCapped } from "@/lib/payload-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { experimentsAllowed } from "@/lib/experiment/gate";
 import { recordExperimentEvents } from "@/lib/experiment/store";
 import { scoreAudit } from "@/lib/scorer";
-import { beaconBoundToSite, requestIp, siteMayServe } from "@/lib/tenant";
+import { beaconBoundToSite, pageScope, requestIp, siteMayServe } from "@/lib/tenant";
 import { hashToken } from "@/lib/token";
 
 function appOrigin(request: NextRequest): string {
@@ -88,9 +89,16 @@ export async function POST(request: NextRequest) {
     const allowOrigin = allowedBeaconOrigin(originHeader, site.domain, appOrigin(request));
     const headers = allowOrigin ? corsHeaders(allowOrigin) : undefined;
 
+    // Only pages on the registered domain feed the site. Signal's own example page is stored as
+    // an app-scope audit and never touches the headline, the findings, or the experiments.
+    const scope = pageScope(parsed.payload.url, site.domain) ?? "app";
+
     if (parsed.payload.intent === "experiment") {
+      if (!experimentsAllowed(site, scope)) {
+        return NextResponse.json({ success: true, recorded: 0, scope }, { headers });
+      }
       const recorded = await recordExperimentEvents(site.id, parsed.payload);
-      return NextResponse.json({ success: true, recorded }, { headers });
+      return NextResponse.json({ success: true, recorded, scope }, { headers });
     }
 
     // Site-level robots.txt / llms.txt facts are read from the stored snapshot; a stale or
@@ -153,20 +161,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await db
-      .update(sites)
-      .set({
-        lastAuditAt: new Date(),
-        seoScore: scores.seo.toString(),
-        aioScore: scores.aio.toString(),
-        overallScore: scores.overall.toString(),
-      })
-      .where(eq(sites.id, site.id));
+    if (scope === "site") {
+      await db
+        .update(sites)
+        .set({
+          lastAuditAt: new Date(),
+          seoScore: scores.seo.toString(),
+          aioScore: scores.aio.toString(),
+          overallScore: scores.overall.toString(),
+        })
+        .where(eq(sites.id, site.id));
+    }
 
     return NextResponse.json(
       {
         success: true,
         auditId: audit.id,
+        scope,
         scores,
         findingsCount: auditFindings.length,
         findings: auditFindings.filter((f) => f.severity !== "info").slice(0, 10),
