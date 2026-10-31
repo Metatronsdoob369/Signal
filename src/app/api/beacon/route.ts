@@ -6,12 +6,13 @@ import { allowedBeaconOrigin, corsHeaders } from "@/lib/cors";
 import { scheduleCrawlRefresh, storedCrawlFacts } from "@/lib/crawl/store";
 import { BEACON_RATE, MAX_BEACON_BYTES } from "@/lib/hard-nos";
 import { parseBeaconPayload, readJsonCapped } from "@/lib/payload-guard";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkCompositeRateLimit } from "@/lib/rate-limit";
 import { experimentsAllowed } from "@/lib/experiment/gate";
 import { recordExperimentEvents } from "@/lib/experiment/store";
 import { scoreAudit } from "@/lib/scorer";
 import { beaconBoundToSite, pageScope, requestIp, siteMayServe } from "@/lib/tenant";
 import { hashToken } from "@/lib/token";
+import { originAndPathname } from "@/lib/url";
 
 function appOrigin(request: NextRequest): string {
   return process.env.APP_ORIGIN || request.nextUrl.origin;
@@ -45,9 +46,11 @@ export async function POST(request: NextRequest) {
   const originHeader = request.headers.get("origin");
   const keyHint = request.nextUrl.searchParams.get("key") || "";
   const ip = requestIp(request);
-  const rateKey = `beacon:${keyHint ? hashToken(keyHint) : ip}`;
-
-  if (!checkRateLimit(rateKey, BEACON_RATE).ok) {
+  const keys = [
+    `beacon:ip:${ip}`,
+    ...(keyHint ? [`beacon:key:${hashToken(keyHint)}`] : []),
+  ];
+  if (!checkCompositeRateLimit(keys, BEACON_RATE).ok) {
     return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
   }
 
@@ -76,8 +79,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Site not found" }, { status: 404 });
     }
 
+    const sanitizedUrl = originAndPathname(parsed.payload.url);
+    if (!sanitizedUrl) {
+      return NextResponse.json({ success: false, error: "Invalid URL" }, { status: 400 });
+    }
+
     const bound = beaconBoundToSite({
-      url: parsed.payload.url,
+      url: sanitizedUrl,
       origin: originHeader && originHeader !== "null" ? originHeader : null,
       siteDomain: site.domain,
       appOrigin: appOrigin(request),
@@ -91,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     // Only pages on the registered domain feed the site. Signal's own example page is stored as
     // an app-scope audit and never touches the headline, the findings, or the experiments.
-    const scope = pageScope(parsed.payload.url, site.domain) ?? "app";
+    const scope = pageScope(sanitizedUrl, site.domain) ?? "app";
 
     if (parsed.payload.intent === "experiment") {
       if (!experimentsAllowed(site, scope)) {
@@ -112,7 +120,7 @@ export async function POST(request: NextRequest) {
       .insert(audits)
       .values({
         siteId: site.id,
-        url: parsed.payload.url,
+        url: sanitizedUrl,
         seoScore: scores.seo.toString(),
         aioScore: scores.aio.toString(),
         performanceScore: scores.performance.toString(),

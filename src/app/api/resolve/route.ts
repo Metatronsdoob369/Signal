@@ -7,7 +7,7 @@ import { allowedBeaconOrigin, corsHeaders } from "@/lib/cors";
 import { experimentsAllowed } from "@/lib/experiment/gate";
 import { resolveVariant } from "@/lib/experiment/store";
 import { BEACON_RATE } from "@/lib/hard-nos";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkCompositeRateLimit } from "@/lib/rate-limit";
 import { pageScope, requestIp, siteMayServe } from "@/lib/tenant";
 import { hashToken } from "@/lib/token";
 
@@ -49,8 +49,11 @@ export async function GET(request: NextRequest) {
   }
 
   const ip = requestIp(request);
-  const rateKey = `resolve:${hashToken(parsed.data.key) || ip}`;
-  if (!checkRateLimit(rateKey, BEACON_RATE).ok) {
+  const keys = [
+    `resolve:ip:${ip}`,
+    ...(parsed.data.key ? [`resolve:key:${hashToken(parsed.data.key)}`] : []),
+  ];
+  if (!checkCompositeRateLimit(keys, BEACON_RATE).ok) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 

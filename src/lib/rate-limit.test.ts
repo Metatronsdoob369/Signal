@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RATE_LIMIT_SWEEP_THRESHOLD, checkRateLimit, rateLimitBucketCount, resetRateLimits } from "@/lib/rate-limit";
+import { RATE_LIMIT_SWEEP_THRESHOLD, checkRateLimit, checkCompositeRateLimit, rateLimitBucketCount, resetRateLimits } from "@/lib/rate-limit";
 
 describe("checkRateLimit", () => {
   it("allows up to max hits in the window then rejects", () => {
@@ -17,6 +17,21 @@ describe("checkRateLimit", () => {
     expect(checkRateLimit("a", opts).ok).toBe(true);
     expect(checkRateLimit("b", opts).ok).toBe(true);
     expect(checkRateLimit("a", opts).ok).toBe(false);
+  });
+});
+
+describe("composite limiter", () => {
+  it("blocks cross-key spam by counting a shared IP bucket", () => {
+    resetRateLimits();
+    const opts = { windowMs: 60_000, max: 3 };
+    const ip = "ip:1.2.3.4";
+    const kA = "key:a";
+    const kB = "key:b";
+    expect(checkCompositeRateLimit([ip, kA], opts).ok).toBe(true); // 1
+    expect(checkCompositeRateLimit([ip, kA], opts).ok).toBe(true); // 2
+    expect(checkCompositeRateLimit([ip, kB], opts).ok).toBe(true); // 3 via different key
+    expect(checkCompositeRateLimit([ip, kA], opts).ok).toBe(false); // IP bucket full
+    expect(checkCompositeRateLimit([ip, kB], opts).ok).toBe(false); // Still full even if key rotates
   });
 });
 
