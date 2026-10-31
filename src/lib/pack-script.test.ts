@@ -29,6 +29,12 @@ describe("buildPackScript", () => {
     expect(script).toContain("/api/beacon");
   });
 
+  it("sends origin+pathname only, never full location.href", () => {
+    expect(script).toContain("var PAGE_URL");
+    expect(script).toContain("url: PAGE_URL");
+    expect(script).not.toContain("url: location.href");
+  });
+
   it("stamps the pack version into the payload", () => {
     expect(PACK_VERSION).toBe("0.2.1");
     expect(script).toContain(`var PACK_VERSION = "${PACK_VERSION}"`);

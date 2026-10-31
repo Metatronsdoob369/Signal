@@ -20,6 +20,7 @@ export function buildPackScript(opts: { key: string; origin: string }): string {
   var KEY = ${key};
   var API_ORIGIN = ${origin};
   var PACK_VERSION = ${JSON.stringify(PACK_VERSION)};
+  var PAGE_URL = (location.origin || (new URL(location.href)).origin) + location.pathname;
 
   // "How do you verify Signal" is a question; "What this page includes" is a noun phrase.
   var QUESTION_START = /^(?:(?:what|why|how|when|where|who|whom|whose|which)\\s+(?:is|are|was|were|do|does|did|can|could|should|would|will|to|much|many|long|often|about)\\b|(?:can|could|should|would|does|do|did|is|are|will)\\s)/i;
@@ -327,7 +328,7 @@ export function buildPackScript(opts: { key: string; origin: string }): string {
 
     return {
       key: KEY,
-      url: location.href,
+      url: PAGE_URL,
       timestamp: new Date().toISOString(),
       packVersion: PACK_VERSION,
       metadata: {
@@ -477,7 +478,7 @@ export function buildPackScript(opts: { key: string; origin: string }): string {
     experimentSent = true;
     send({
       key: KEY,
-      url: location.href,
+      url: PAGE_URL,
       intent: "experiment",
       variantId: variantId,
       events: [

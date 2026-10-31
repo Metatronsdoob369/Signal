@@ -144,6 +144,12 @@ describe("pack runtime", () => {
     expect(findings.some((f) => f.ruleId === "seo.headings.hierarchy")).toBe(false);
   });
 
+  it("strips query and hash from the beacon URL", async () => {
+    const captured = await runPack(EXAMPLE_PAGE, "https://client.example.com/guide/?utm=ad#top");
+    const payload = payloadOf(captured);
+    expect(payload.url).toBe("https://client.example.com/guide/");
+  });
+
   it("observes the defects on a bare page without judging them client-side", async () => {
     const captured = await runPack(BARE_PAGE, "https://client.example.com/Bare_Page");
     const payload = payloadOf(captured);
