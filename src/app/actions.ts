@@ -11,6 +11,7 @@ import { MAX_TOKEN_LENGTH, REGISTER_GLOBAL_RATE, REGISTER_RATE } from "@/lib/har
 import { checkRateLimit } from "@/lib/rate-limit";
 import { clientIp, registerDomainError } from "@/lib/tenant";
 import { generatePublicKey, generateSiteToken, hashToken } from "@/lib/token";
+import { randomBytes } from "node:crypto";
 
 export type CreateSiteState = {
   error?: string;
@@ -50,6 +51,7 @@ export async function createSite(
 
   const token = generateSiteToken();
   const publicKey = generatePublicKey();
+  const verificationToken = randomBytes(16).toString("hex");
   try {
     const [created] = await db
       .insert(sites)
@@ -58,6 +60,7 @@ export async function createSite(
         name: name || domain,
         tokenHash: hashToken(token),
         publicKey,
+        verificationToken,
       })
       .returning();
     scheduleCrawlRefresh({ id: created.id, domain: created.domain, crawlFactsAt: null });

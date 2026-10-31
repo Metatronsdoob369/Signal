@@ -105,8 +105,8 @@ export function beaconBoundToSite(opts: {
   return { ok: true };
 }
 
-export function siteMayServe(site: { isActive: boolean }): boolean {
-  return site.isActive;
+export function siteMayServe(site: { isActive: boolean; isVerified?: boolean }): boolean {
+  return site.isActive && site.isVerified !== false;
 }
 
 export function registerDomainError(): string {

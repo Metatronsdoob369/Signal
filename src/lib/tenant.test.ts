@@ -108,6 +108,13 @@ describe("siteMayServe", () => {
     expect(siteMayServe({ isActive: false })).toBe(false);
     expect(siteMayServe({ isActive: true })).toBe(true);
   });
+  it("requires site to be verified when the flag is present", () => {
+    expect(siteMayServe({ isActive: true, isVerified: true })).toBe(true);
+    expect(siteMayServe({ isActive: true, isVerified: false })).toBe(false);
+    // Back-compat: when isVerified is absent, treat as verified to avoid breaking migrations
+    expect(siteMayServe({ isActive: true })).toBe(true);
+    expect(siteMayServe({ isActive: false, isVerified: true })).toBe(false);
+  });
 });
 
 describe("registerDomainError", () => {

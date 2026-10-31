@@ -19,6 +19,10 @@ export const sites = pgTable("sites", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   lastAuditAt: timestamp("last_audit_at", { withTimezone: true }),
   isActive: boolean("is_active").default(true).notNull(),
+  /** Site must prove domain ownership before receiving audits or variants. */
+  isVerified: boolean("is_verified").default(false).notNull(),
+  /** Random token included in DNS TXT or served at /.well-known/signal-verify.txt */
+  verificationToken: text("verification_token"),
   /** Per-site switch for title/description experiments. Off by default: variants rewrite the client page's title. */
   experimentsEnabled: boolean("experiments_enabled").default(false).notNull(),
   seoScore: numeric("seo_score", { precision: 5, scale: 2 }),

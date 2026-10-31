@@ -9,6 +9,7 @@ import { readJsonCapped } from "@/lib/payload-guard";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { registerDomainError, requestIp } from "@/lib/tenant";
 import { generatePublicKey, generateSiteToken, hashToken } from "@/lib/token";
+import { randomBytes } from "node:crypto";
 
 export async function GET() {
   return NextResponse.json(
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
 
     const token = generateSiteToken();
     const publicKey = generatePublicKey();
+    const verificationToken = randomBytes(16).toString("hex");
     const [site] = await db
       .insert(sites)
       .values({
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
         name: name || domain,
         tokenHash: hashToken(token),
         publicKey,
+        verificationToken,
       })
       .returning();
 
@@ -69,6 +72,7 @@ export async function POST(request: NextRequest) {
         token,
         publicKey,
         embedCode,
+        verificationToken,
         dashboardUrl: `${origin}/dashboard/${token}`,
       },
     });
